@@ -1,5 +1,45 @@
-import { firebaseConfig } from './firebase-config.js';
-import { seedData } from './seed-data.js';
+const seedData = {
+  version: 1,
+  expenses: [
+    { id: "e1", name: "Sawa", amount: 138 },
+    { id: "e2", name: "iCloud", amount: 14 },
+    { id: "e3", name: "Expenses", amount: 205.35 },
+    { id: "e4", name: "Tappy", amount: 232.65 }
+  ],
+  rewardBase: 990,
+  creditors: [
+    { id: "c1", name: "Sister", amount: 300 },
+    { id: "c2", name: "Dehmy", amount: 288.5 },
+    { id: "c3", name: "Abod", amount: 243 }
+  ],
+  fuel: [
+    { id: "f1", date: "2026-07-02", amount: 95 },
+    { id: "f2", date: "2026-07-07", amount: 52 }
+  ],
+  months: {
+    "February": { rate: 31.48, sent: 1921.35, shifts: [
+      [14,"05:00",125],[18,"08:53",279.577028],[19,"06:00",188.88],[20,"06:00",188.88],[22,"06:00",246],[23,"06:00",188.88],[24,"07:40",241.4516],[25,"06:00",188.88],[26,"08:00",251.84],[27,"08:58",282.227644]
+    ]},
+    "March": { rate: 31.48, sent: 5421.32, shifts: [
+      [1,"09:00",283.32],[2,"09:00",283.32],[3,"08:00",251.84],[4,"09:00",283.32],[5,"08:00",251.84],[6,"09:00",283.32],[8,"08:00",251.84],[9,"09:00",283.32],[10,"08:00",251.84],[11,"08:00",251.84],[12,"09:00",283.32],[14,"03:00",94.44],[15,"09:00",283.32],[16,"09:00",283.32],[17,"09:00",283.32],[18,"09:00",283.32],[21,"08:00",328],[22,"07:58",326.6333333],[24,"06:15",156.25],[25,"06:32",163.3333333]
+    ]},
+    "May": { rate: 25, sent: 2629.33, shifts: [
+      [1,"05:00",125],[5,"05:00",125],[6,"05:00",125],[8,"05:00",125],[11,"05:00",125],[15,"05:20",133.3333333],[16,"05:00",125],[19,"05:15",131.25],[21,"05:00",125],[22,"05:00",125],[23,"05:00",125],[24,"06:30",162.5],[25,"07:45",193.75],[26,"07:00",287],[29,"05:00",205],[30,"06:30",266.5],[31,"05:00",125]
+    ]},
+    "June": { rate: 25, sent: 0, shifts: [
+      [3,"07:00",150],[5,"05:00",125],[6,"06:00",150],[7,"06:00",150],[8,"05:00",125],[10,"05:00",125],[12,"05:00",125],[13,"04:00",100],[16,"07:30",187.5],[17,"07:30",187.5],[18,"06:30",162.5],[20,"07:00",175],[21,"07:00",175],[22,"06:30",162.5],[24,"07:00",175],[25,"08:00",200],[27,"09:00",225],[28,"08:00",200],[29,"08:00",200],[30,"09:00",225]
+    ]},
+    "July": { rate: 25, sent: 0, shifts: [
+      [1,"07:00",175],[2,"05:00",125],[4,"05:30",137.5],[5,"05:00",125],[6,"05:40",141.6666667],[8,"08:00",200]
+    ]}
+  },
+  rewards: [
+    [1,"2026-03-26",990,true],[2,"2026-04-27",990,true],[3,"2026-05-24",990,true],[4,"2026-06-28",990,true],[5,"2026-07-27",990,false],[6,"2026-08-27",990,false],[7,"2026-09-27",990,false],[8,"2026-10-27",990,false],[9,"2026-11-26",990,false],[10,"2026-12-27",990,false],[11,"2027-01-27",990,false],[12,"2027-02-28",990,false],[13,"2027-03-28",990,false],[14,"2027-04-27",990,false],[15,"2027-05-27",990,false],[16,"2027-06-27",990,false],[17,"2027-07-27",990,false]
+  ].map(([n,date,amount,received]) => ({ id:`r${n}`, n, date, amount, received }))
+};
+
+
+let firebaseConfig = { apiKey:'', authDomain:'', projectId:'', storageBucket:'', messagingSenderId:'', appId:'' };
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -129,8 +169,17 @@ async function persist(){ saveLocal(); if(firebase && currentUser){ try{ await f
 function setSync(mode){ const el=$('#syncStatus'); el.classList.toggle('cloud',mode==='cloud'); el.querySelector('span:last-child').textContent=mode==='cloud'?'متزامن مع Firebase':'محفوظ محليًا'; }
 
 async function initFirebase(){
-  if(!firebaseConfig.apiKey || !firebaseConfig.projectId) return;
-  try{
+  try {
+    try {
+      const cfg = await import('./firebase-config.js');
+      if (cfg?.firebaseConfig) firebaseConfig = cfg.firebaseConfig;
+    } catch (e) {
+      console.warn('firebase-config.js غير موجود أو غير صالح. سيعمل الموقع محليًا.', e);
+    }
+    if(!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+      setSync('local');
+      return;
+    }
     const appMod=await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js');
     const authMod=await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js');
     const fsMod=await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js');
