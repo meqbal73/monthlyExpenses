@@ -221,6 +221,8 @@ const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
 const STORAGE_KEY = 'my-finance-data-v2';
 const LEGACY_STORAGE_KEY = 'my-finance-data-v1';
+const currentMonthKey = () => new Date().toISOString().slice(0,7);
+const uid = p => `${p}${Date.now()}${Math.random().toString(16).slice(2)}`;
 let state = migrateState(loadLocal());
 let activeMonth = getLatestMonthKey();
 let firebase = null;
@@ -233,9 +235,6 @@ const monthNamesAr = {
 const monthNamesByNumber = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
 const fmtMoney = n => new Intl.NumberFormat('ar-SA',{maximumFractionDigits:2}).format(Number(n||0));
 const fmtDate = s => new Intl.DateTimeFormat('ar-SA',{dateStyle:'medium'}).format(new Date(`${s}T12:00:00`));
-const uid = p => `${p}${Date.now()}${Math.random().toString(16).slice(2)}`;
-const currentMonthKey = () => new Date().toISOString().slice(0,7);
-
 function cloneSeed(){ return JSON.parse(JSON.stringify(seedData)); }
 function loadLocal(){
   try {
