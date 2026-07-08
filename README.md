@@ -42,3 +42,9 @@ firebase deploy --only hosting
 ```
 
 > مهم: لا ترفع Service Account أو أي private key إلى GitHub. إعدادات Web App العادية ليست بديلًا عن قواعد Firestore الآمنة.
+
+
+## Page flow
+- `index.html`: Authentication first page.
+- `dashboard.html`: Finance dashboard after sign-in.
+- `auth.html`: Redirects to `index.html` for compatibility.
