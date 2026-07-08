@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="description" content="لوحة مالية شخصية لإدارة المصروفات والدخل والمكافآت" />
+  <title>My Finance Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">MF</div>
+        <div><strong>My Finance</strong><span>Personal Dashboard</span></div>
+      </div>
+      <nav class="nav-list">
+        <button class="nav-item active" data-view="dashboard">🏠 <span>الرئيسية</span></button>
+        <button class="nav-item" data-view="salary">💳 <span>الراتب والالتزامات</span></button>
+        <button class="nav-item" data-view="marn">⏱️ <span>دخل مرن</span></button>
+        <button class="nav-item" data-view="rewards">🎓 <span>مكافآت الجامعة</span></button>
+        <button class="nav-item" data-view="settings">⚙️ <span>الإعدادات</span></button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="sync-pill" id="syncStatus"><span class="dot"></span><span>محلي</span></div>
+        <button class="ghost-btn full" id="logoutBtn" hidden>تسجيل الخروج</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="icon-btn mobile-only" id="menuBtn">☰</button>
+        <div>
+          <h1 id="pageTitle">لوحة التحكم</h1>
+          <p id="todayText"></p>
+        </div>
+        <div class="top-actions">
+          <button class="icon-btn" id="themeBtn" title="تغيير المظهر">◐</button>
+          <button class="primary-btn" id="openAuthBtn">ربط ومزامنة</button>
+        </div>
+      </header>
+
+      <section class="view active" id="dashboardView">
+        <div class="hero-card">
+          <div>
+            <span class="eyebrow">نظرة مالية سريعة</span>
+            <h2>كل دخلك والتزاماتك في مكان واحد</h2>
+            <p>تم تحويل محتوى ملف Excel إلى لوحة تفاعلية قابلة للتعديل والحفظ والمزامنة.</p>
+          </div>
+          <div class="hero-balance"><span>صافي الوضع الحالي</span><strong id="netPosition">0 ر.س</strong></div>
+        </div>
+
+        <div class="kpi-grid">
+          <article class="kpi-card"><span>إجمالي دخل مرن</span><strong id="marnTotalKpi">0</strong><small>ر.س</small></article>
+          <article class="kpi-card"><span>المكافآت المتبقية</span><strong id="rewardRemainingKpi">0</strong><small>ر.س</small></article>
+          <article class="kpi-card"><span>الديون لك</span><strong id="creditorsKpi">0</strong><small>ر.س</small></article>
+          <article class="kpi-card"><span>مصروفات المكافأة</span><strong id="expensesKpi">0</strong><small>ر.س</small></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <article class="panel chart-panel">
+            <div class="panel-head"><div><span class="eyebrow">دخل مرن</span><h3>الدخل حسب الشهر</h3></div></div>
+            <div class="bars" id="incomeBars"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><span class="eyebrow">القادم</span><h3>المكافأة القادمة</h3></div></div>
+            <div class="next-reward" id="nextRewardCard"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="salaryView">
+        <div class="section-toolbar">
+          <div><h2>الراتب والالتزامات</h2><p>مصروفات، دائنون، بنزين، ومصادر الدخل.</p></div>
+          <button class="primary-btn" data-add="expense">+ إضافة مصروف</button>
+        </div>
+        <div class="cards-grid-2">
+          <article class="panel"><div class="panel-head"><h3>مصروفات المكافأة</h3><button class="text-btn" data-add="expense">إضافة</button></div><div id="expensesTable"></div></article>
+          <article class="panel"><div class="panel-head"><h3>الدائنون</h3><button class="text-btn" data-add="creditor">إضافة</button></div><div id="creditorsTable"></div></article>
+          <article class="panel"><div class="panel-head"><h3>البنزين</h3><button class="text-btn" data-add="fuel">إضافة</button></div><div id="fuelTable"></div></article>
+          <article class="panel"><div class="panel-head"><h3>مصادر دخل مرن</h3></div><div id="incomeSummaryTable"></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="marnView">
+        <div class="section-toolbar">
+          <div><h2>دخل مرن</h2><p>إدارة الشفتات والساعات والمبالغ لكل شهر.</p></div>
+          <button class="primary-btn" data-add="shift">+ إضافة شفت</button>
+        </div>
+        <div class="month-tabs" id="monthTabs"></div>
+        <article class="panel"><div class="panel-head"><h3 id="activeMonthTitle">الشهر</h3><div class="summary-inline" id="monthSummary"></div></div><div id="shiftsTable"></div></article>
+      </section>
+
+      <section class="view" id="rewardsView">
+        <div class="section-toolbar"><div><h2>مكافآت الجامعة</h2><p>المواعيد، حالة الاستلام، والأيام المتبقية.</p></div><button class="primary-btn" data-add="reward">+ إضافة مكافأة</button></div>
+        <article class="panel"><div id="rewardsTable"></div></article>
+      </section>
+
+      <section class="view" id="settingsView">
+        <div class="section-toolbar"><div><h2>الإعدادات</h2><p>النسخ الاحتياطي، الاستيراد، والمزامنة.</p></div></div>
+        <div class="settings-grid">
+          <article class="panel setting-card"><h3>Firebase</h3><p>بعد تعبئة ملف <code>firebase-config.js</code> يصبح تسجيل الدخول والمزامنة السحابية متاحًا.</p><button class="primary-btn" id="settingsAuthBtn">تسجيل الدخول / إنشاء حساب</button></article>
+          <article class="panel setting-card"><h3>نسخة احتياطية</h3><p>نزّل جميع بيانات الموقع في ملف JSON للاحتفاظ بنسخة أو نقلها.</p><button class="secondary-btn" id="exportBtn">تصدير البيانات</button></article>
+          <article class="panel setting-card"><h3>استيراد بيانات</h3><p>استرجع نسخة JSON سابقة. سيتم استبدال البيانات الحالية.</p><label class="secondary-btn file-label">استيراد JSON<input type="file" id="importInput" accept="application/json" hidden></label></article>
+          <article class="panel setting-card danger"><h3>إعادة ضبط</h3><p>حذف بيانات الموقع الحالية وإرجاع البيانات الأولية المستخرجة من ملف Excel.</p><button class="danger-btn" id="resetBtn">إعادة ضبط البيانات</button></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <button class="modal-close" id="modalClose">×</button>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
