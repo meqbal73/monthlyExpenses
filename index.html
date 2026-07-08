@@ -62,7 +62,7 @@
       </form>
 
       <div class="status" id="status" aria-live="polite"></div>
-      <p class="config-note">هذه الصفحة تستخدم إعدادات <code>firebase-config.js</code>. عند نجاح تسجيل الدخول سيتم تحويلك تلقائيًا إلى لوحة التحكم.</p>
+      <p class="config-note">بعد نجاح تسجيل الدخول سيتم تحويلك تلقائيًا إلى لوحة التحكم.</p>
     </section>
   </main>
 
@@ -119,16 +119,19 @@
       return `حدث خطأ في تسجيل الدخول (${code || 'unknown'}).`;
     }
 
+    const firebaseConfig = {
+  apiKey: "AIzaSyDp6RHQkVZNPXXGPguwwNCzONYC4uAQee8",
+  authDomain: "monthlyexpenses-2e3f4.firebaseapp.com",
+  databaseURL: "https://monthlyexpenses-2e3f4-default-rtdb.firebaseio.com",
+  projectId: "monthlyexpenses-2e3f4",
+  storageBucket: "monthlyexpenses-2e3f4.firebasestorage.app",
+  messagingSenderId: "14644698781",
+  appId: "1:14644698781:web:5e20b193bd68de9d5dbe74",
+  measurementId: "G-2M497V55CC"
+};
+
     async function initFirebase(){
       try {
-        const cfgMod = await import('./firebase-config.js');
-        const firebaseConfig = cfgMod.firebaseConfig;
-        const configured = firebaseConfig?.apiKey && firebaseConfig?.projectId && firebaseConfig?.authDomain;
-        if(!configured){
-          showStatus('أضف بيانات مشروع Firebase داخل firebase-config.js. أزرار الصفحة تعمل الآن لكن تسجيل الدخول يحتاج الإعدادات.', 'error');
-          return;
-        }
-
         const appMod = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js');
         const authMod = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js');
         const app = appMod.initializeApp(firebaseConfig);
@@ -143,7 +146,7 @@
         });
       } catch (error) {
         console.error(error);
-        showStatus('تعذر تحميل Firebase. تأكد من firebase-config.js والاتصال بالإنترنت.', 'error');
+        showStatus('تعذر الاتصال بخدمة Firebase. تحقق من الإنترنت ثم أعد المحاولة.', 'error');
       }
     }
 
@@ -164,7 +167,7 @@
         return;
       }
       if(!auth || !authApi){
-        showStatus('Firebase غير مربوط بعد. أضف بيانات المشروع داخل firebase-config.js ثم أعد المحاولة.');
+        showStatus('لم يكتمل الاتصال بـ Firebase بعد. انتظر لحظة ثم أعد المحاولة.');
         return;
       }
 

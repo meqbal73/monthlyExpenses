@@ -39,7 +39,16 @@ const seedData = {
 };
 
 
-let firebaseConfig = { apiKey:'', authDomain:'', projectId:'', storageBucket:'', messagingSenderId:'', appId:'' };
+const firebaseConfig = {
+  apiKey: "AIzaSyDp6RHQkVZNPXXGPguwwNCzONYC4uAQee8",
+  authDomain: "monthlyexpenses-2e3f4.firebaseapp.com",
+  databaseURL: "https://monthlyexpenses-2e3f4-default-rtdb.firebaseio.com",
+  projectId: "monthlyexpenses-2e3f4",
+  storageBucket: "monthlyexpenses-2e3f4.firebasestorage.app",
+  messagingSenderId: "14644698781",
+  appId: "1:14644698781:web:5e20b193bd68de9d5dbe74",
+  measurementId: "G-2M497V55CC"
+};
 
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
@@ -229,7 +238,7 @@ async function loadCloud(){
 }
 
 function authModal(){
-  if(!firebase){ openModal(`<div class="form"><h2>Firebase غير مفعّل</h2><p>افتح ملف <code>firebase-config.js</code> والصق إعدادات تطبيق الويب من Firebase ثم فعّل Email/Password في Authentication.</p><button class="primary-btn" id="okBtn">حسنًا</button></div>`); $('#okBtn').onclick=closeModal; return; }
+  if(!firebase){ openModal(`<div class="form"><h2>Firebase غير مفعّل</h2><p>تعذر الاتصال بـ Firebase. تحقق من الإنترنت وأعد تحميل الصفحة.</p><button class="primary-btn" id="okBtn">حسنًا</button></div>`); $('#okBtn').onclick=closeModal; return; }
   if(currentUser){ openModal(`<div class="form"><h2>الحساب متصل</h2><p>${escapeHtml(currentUser.email||'')}</p><button class="danger-btn" id="modalLogout">تسجيل الخروج</button></div>`); $('#modalLogout').onclick=async()=>{await firebase.signOut(firebase.auth);closeModal();};return; }
   openModal(`<form class="form" id="authForm"><h2>تسجيل الدخول</h2><p>استخدم البريد وكلمة المرور لمزامنة بياناتك.</p><label class="field"><span>البريد الإلكتروني</span><input type="email" name="email" required></label><label class="field"><span>كلمة المرور</span><input type="password" name="password" minlength="6" required></label><div class="form-actions"><button class="primary-btn" type="submit">دخول</button><button class="secondary-btn" type="button" id="signupBtn">إنشاء حساب</button></div></form>`);
   $('#authForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await firebase.signInWithEmailAndPassword(firebase.auth,f.get('email'),f.get('password'));closeModal();toast('تم تسجيل الدخول');}catch(err){toast(firebaseError(err));}};
