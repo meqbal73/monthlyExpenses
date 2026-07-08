@@ -1,7 +1,4 @@
-// الصق إعدادات Web App من Firebase Console هنا.
-// لا تضع أي Service Account أو private key في مشروع GitHub.
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-export const firebaseConfig = {
+const firebaseConfig = {
   apiKey: "AIzaSyDp6RHQkVZNPXXGPguuwNCzONYC4uAQee8",
   authDomain: "monthlyexpenses-2e3f4.firebaseapp.com",
   databaseURL: "https://monthlyexpenses-2e3f4-default-rtdb.firebaseio.com",
