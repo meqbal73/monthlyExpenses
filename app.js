@@ -44,7 +44,7 @@ let firebaseConfig = { apiKey:'', authDomain:'', projectId:'', storageBucket:'',
 const $ = (s, root=document) => root.querySelector(s);
 const $$ = (s, root=document) => [...root.querySelectorAll(s)];
 const STORAGE_KEY = 'my-finance-data-v1';
-let state = loadLocal();
+let state = migrateState(loadLocal());
 let activeMonth = Object.keys(state.months)[0];
 let firebase = null;
 let currentUser = null;
@@ -56,12 +56,46 @@ const uid = p => `${p}${Date.now()}${Math.random().toString(16).slice(2)}`;
 
 function cloneSeed(){ return JSON.parse(JSON.stringify(seedData)); }
 function loadLocal(){ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || cloneSeed(); } catch { return cloneSeed(); } }
-function saveLocal(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); setSync('local'); }
+function saveLocal(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){ console.warn('Local storage unavailable',e); } setSync('local'); }
 function deepTotal(arr, key='amount'){ return arr.reduce((s,x)=>s+Number(x[key]||0),0); }
-function durationHours(t){ if(!t) return 0; const [h,m]=t.split(':').map(Number); return h + m/60; }
+function durationHours(t){
+  if (typeof t === 'number') return Number(t) || 0;
+  if(!t) return 0;
+  if (String(t).includes(':')) { const [h,m]=String(t).split(':').map(Number); return (h||0) + (m||0)/60; }
+  return Number(t)||0;
+}
+function monthNumber(name){ return ({February:'02',March:'03',May:'05',June:'06',July:'07'})[name] || '01'; }
+function shiftDateFromLegacy(monthName, day){ return `2026-${monthNumber(monthName)}-${String(day).padStart(2,'0')}`; }
+function normalizeShift(shift, monthName){
+  if (Array.isArray(shift)) {
+    const hours = durationHours(shift[1]);
+    const total = Number(shift[2]||0);
+    return { date: shiftDateFromLegacy(monthName, shift[0]), hours, rate: hours ? total / hours : 0 };
+  }
+  return {
+    date: shift.date || shiftDateFromLegacy(monthName, shift.day || 1),
+    hours: Number(shift.hours||0),
+    rate: Number(shift.rate||shift.hourlyRate||0)
+  };
+}
+function migrateState(data){
+  const next = data || cloneSeed();
+  if (next.months) {
+    Object.entries(next.months).forEach(([monthName,m])=>{
+      m.shifts = (m.shifts||[]).map(x=>normalizeShift(x,monthName));
+    });
+  }
+  return next;
+}
+function shiftTotal(shift){ return Number(shift.hours||0) * Number(shift.rate||0); }
 
 function marnTotals(){
-  return Object.entries(state.months).map(([name,m])=>({name,total:deepTotal(m.shifts.map(x=>({amount:x[2]}))),hours:m.shifts.reduce((s,x)=>s+durationHours(x[1]),0),sent:Number(m.sent||0)}));
+  return Object.entries(state.months).map(([name,m])=>({
+    name,
+    total:(m.shifts||[]).reduce((sum,x)=>sum+shiftTotal(x),0),
+    hours:(m.shifts||[]).reduce((sum,x)=>sum+Number(x.hours||0),0),
+    sent:Number(m.sent||0)
+  }));
 }
 function metrics(){
   const marn = marnTotals();
@@ -106,12 +140,12 @@ function renderSalary(){
 function renderMarn(){
   $('#monthTabs').innerHTML=Object.keys(state.months).map(name=>`<button class="month-tab ${name===activeMonth?'active':''}" data-month="${name}">${monthNamesAr[name]||name}</button>`).join('');
   const m=state.months[activeMonth]; $('#activeMonthTitle').textContent=`شفتات ${monthNamesAr[activeMonth]||activeMonth}`;
-  const hours=m.shifts.reduce((s,x)=>s+durationHours(x[1]),0), total=m.shifts.reduce((s,x)=>s+Number(x[2]||0),0);
-  $('#monthSummary').innerHTML=`<span>${m.shifts.length} شفت</span><span>${hours.toFixed(1)} ساعة</span><span>${fmtMoney(total)} ر.س</span>`;
-  const rows=m.shifts.map((x,i)=>`<tr><td>${x[0]}</td><td>${x[1]}</td><td>${Math.max(0,durationHours(x[1])-5).toFixed(2)}</td><td class="amount positive">${fmtMoney(x[2])}</td><td>${actions('shift',i)}</td></tr>`);
-  $('#shiftsTable').innerHTML=table(['اليوم','الساعات','الإضافي*','المبلغ',''],rows);
+  const hours=(m.shifts||[]).reduce((sum,x)=>sum+Number(x.hours||0),0);
+  const total=(m.shifts||[]).reduce((sum,x)=>sum+shiftTotal(x),0);
+  $('#monthSummary').innerHTML=`<span>${m.shifts.length} شفت</span><span>${hours.toFixed(2)} ساعة</span><span>${fmtMoney(total)} ر.س</span>`;
+  const rows=m.shifts.map((x,i)=>`<tr><td>${fmtDate(x.date)}</td><td>${Number(x.hours).toFixed(2)}</td><td>${Math.max(0,Number(x.hours)-5).toFixed(2)}</td><td>${fmtMoney(x.rate)} ر.س/ساعة</td><td class="amount positive">${fmtMoney(shiftTotal(x))}</td><td>${actions('shift',i)}</td></tr>`);
+  $('#shiftsTable').innerHTML=table(['التاريخ','عدد الساعات','الإضافي بعد 5 ساعات','سعر الساعة','مبلغ الشفت',''],rows);
 }
-
 function renderRewards(){
   const today=new Date(); today.setHours(0,0,0,0);
   const rows=state.rewards.map(r=>{const days=Math.max(0,Math.ceil((new Date(`${r.date}T00:00:00`)-today)/86400000));return `<tr><td>${r.n}</td><td>${fmtDate(r.date)}</td><td>${new Intl.DateTimeFormat('ar-SA',{weekday:'long'}).format(new Date(`${r.date}T12:00:00`))}</td><td class="amount">${fmtMoney(r.amount)}</td><td><button class="mini-btn" data-toggle-reward="${r.id}">${r.received?'✅ مستلمة':'⏳ منتظرة'}</button></td><td>${r.received?'—':days}</td><td>${actions('reward',r.id)}</td></tr>`});
@@ -134,16 +168,16 @@ function itemForm(type,item={}){
     creditor:{title:'دائن',fields:[['name','الاسم','text'],['amount','المبلغ','number']]},
     fuel:{title:'بنزين',fields:[['date','التاريخ','date'],['amount','المبلغ','number']]},
     reward:{title:'مكافأة',fields:[['date','التاريخ','date'],['amount','المبلغ','number']]},
-    shift:{title:'شفت',fields:[['day','اليوم من الشهر','number'],['hours','الساعات HH:MM','time'],['amount','المبلغ','number']]}
+    shift:{title:'شفت',fields:[['date','التاريخ','date'],['hours','عدد الساعات','number'],['rate','سعر الساعة (ر.س)','number']]}
   }[type];
-  openModal(`<form class="form" id="itemForm"><h2>${item.__edit?'تعديل':'إضافة'} ${defs.title}</h2><p>أدخل البيانات ثم احفظ.</p>${defs.fields.map(([k,l,t])=>`<label class="field"><span>${l}</span><input name="${k}" type="${t}" step="0.01" required value="${escapeHtml(item[k]??'')}"></label>`).join('')}<div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div></form>`);
+  openModal(`<form class="form" id="itemForm"><h2>${item.__edit?'تعديل':'إضافة'} ${defs.title}</h2><p>${type==='shift'?'اختر التاريخ من التقويم، وأدخل عدد الساعات وسعر الساعة. سيُحسب مبلغ الشفت تلقائيًا.':'أدخل البيانات ثم احفظ.'}</p>${defs.fields.map(([k,l,t])=>`<label class="field"><span>${l}</span><input name="${k}" type="${t}" step="0.01" required value="${escapeHtml(item[k]??'')}"></label>`).join('')}<div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div></form>`);
   $('#cancelModal').onclick=closeModal;
   $('#itemForm').onsubmit=e=>{e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));saveItem(type,item,fd);};
 }
 
 async function saveItem(type,item,fd){
   if(type==='shift'){
-    const arr=state.months[activeMonth].shifts; const val=[Number(fd.day),fd.hours,Number(fd.amount)]; item.__edit?arr[item.index]=val:arr.push(val); arr.sort((a,b)=>a[0]-b[0]);
+    const arr=state.months[activeMonth].shifts; const val={date:fd.date,hours:Number(fd.hours),rate:Number(fd.rate)}; item.__edit?arr[item.index]=val:arr.push(val); arr.sort((a,b)=>a.date.localeCompare(b.date));
   } else {
     const key={expense:'expenses',creditor:'creditors',fuel:'fuel',reward:'rewards'}[type], arr=state[key];
     const data={...fd,amount:Number(fd.amount)};
@@ -161,7 +195,7 @@ async function removeItem(type,id){
 }
 
 function editItem(type,id){
-  if(type==='shift'){ const x=state.months[activeMonth].shifts[Number(id)]; itemForm(type,{__edit:true,index:Number(id),day:x[0],hours:x[1],amount:x[2]}); return; }
+  if(type==='shift'){ const x=state.months[activeMonth].shifts[Number(id)]; itemForm(type,{__edit:true,index:Number(id),date:x.date,hours:x.hours,rate:x.rate}); return; }
   const key={expense:'expenses',creditor:'creditors',fuel:'fuel',reward:'rewards'}[type]; const x=state[key].find(x=>x.id===id); itemForm(type,{...x,__edit:true});
 }
 
@@ -212,8 +246,8 @@ document.addEventListener('click',e=>{const del=e.target.closest('[data-delete]'
 $('#modalClose').onclick=closeModal; $('#modalBackdrop').onclick=e=>{if(e.target===e.currentTarget)closeModal();};
 $('#openAuthBtn').onclick=authModal; $('#settingsAuthBtn').onclick=authModal; $('#logoutBtn').onclick=()=>firebase?.signOut(firebase.auth);
 $('#exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`my-finance-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);};
-$('#importInput').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{state=JSON.parse(await file.text());await persist();render();toast('تم الاستيراد');}catch{toast('ملف JSON غير صالح');}e.target.value='';};
-$('#resetBtn').onclick=async()=>{if(confirm('سيتم استبدال البيانات الحالية بالبيانات الأولية. متابعة؟')){state=cloneSeed();activeMonth=Object.keys(state.months)[0];await persist();render();toast('تمت إعادة الضبط');}};
+$('#importInput').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{state=migrateState(JSON.parse(await file.text()));await persist();render();toast('تم الاستيراد');}catch{toast('ملف JSON غير صالح');}e.target.value='';};
+$('#resetBtn').onclick=async()=>{if(confirm('سيتم استبدال البيانات الحالية بالبيانات الأولية. متابعة؟')){state=migrateState(cloneSeed());activeMonth=Object.keys(state.months)[0];await persist();render();toast('تمت إعادة الضبط');}};
 
 document.documentElement.dataset.theme=localStorage.getItem('finance-theme')||'light';
 $('#todayText').textContent=new Intl.DateTimeFormat('ar-SA',{dateStyle:'full'}).format(new Date());
