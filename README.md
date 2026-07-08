@@ -17,3 +17,15 @@
 
 ## Firebase
 إعدادات Firebase موجودة داخل `index.html` و`dashboard.html` حسب المشروع الحالي. لا تغيرها إلا عند الانتقال إلى مشروع Firebase آخر.
+
+## Latest update
+- Added a personal debts table with original amount, paid amount, remaining amount, due date, and status.
+- Added edit/delete support across salary and monthly sections: budgets, budget entries, custom tables, custom rows, Marn month settlement, and current month settings.
+
+
+## قسم التجميع
+- رصيد تراكمي مستمر لا يتصفر مع نهاية الشهر.
+- إضافة مبلغ أو سحب مبلغ.
+- سجل بالتاريخ والوصف والمبلغ والرصيد بعد كل حركة.
+- تعديل وحذف كل حركة.
+- محفوظ مع النسخة المحلية وFirebase ضمن نفس بيانات المستخدم.

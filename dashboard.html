@@ -51,7 +51,6 @@
             <h2>كل دخلك والتزاماتك في مكان واحد</h2>
             <p>تم تحويل محتوى ملف Excel إلى لوحة تفاعلية قابلة للتعديل والحفظ والمزامنة.</p>
           </div>
-          <div class="hero-balance"><span>صافي الوضع الحالي</span><strong id="netPosition">0 ر.س</strong></div>
         </div>
 
         <div class="kpi-grid">
@@ -109,6 +108,28 @@
         <div style="height:18px"></div>
 
         <article class="panel">
+          <div class="panel-head"><div><span class="eyebrow">التزاماتي</span><h3>جدول ديوني الخاصة</h3></div><button class="text-btn" data-add="debt">+ إضافة دين</button></div>
+          <div id="debtsTable"></div>
+        </article>
+
+        <div style="height:18px"></div>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div><span class="eyebrow">التجميع</span><h3>رصيد التجميع التراكمي</h3><p>رصيد مستمر لا يتصفر مع نهاية الشهر.</p></div>
+            <button class="text-btn" id="addAggregationBtn">+ إضافة حركة</button>
+          </div>
+          <div class="settlement-grid" style="margin-bottom:16px">
+            <div><span>الرصيد الحالي</span><strong id="aggregationBalance">0 ر.س</strong></div>
+            <div><span>إجمالي الإضافات</span><strong id="aggregationAdded">0 ر.س</strong></div>
+            <div><span>إجمالي السحوبات</span><strong id="aggregationWithdrawn">0 ر.س</strong></div>
+          </div>
+          <div id="aggregationTable"></div>
+        </article>
+
+        <div style="height:18px"></div>
+
+        <article class="panel">
           <div class="panel-head"><div><span class="eyebrow">مرن وقابل للتخصيص</span><h3>الجداول المخصصة</h3></div></div>
           <div id="customTablesContainer"></div>
         </article>
@@ -126,6 +147,8 @@
           <div><h2>دخل مرن</h2><p>إدارة الشفتات والمستحقات والاستلام لكل شهر.</p></div>
           <div class="toolbar-actions">
             <button class="secondary-btn" id="addMonthBtn">+ إضافة شهر</button>
+            <button class="secondary-btn" id="editMonthBtn">تعديل الشهر الحالي</button>
+            <button class="danger-btn" id="deleteMonthBtn">حذف الشهر الحالي</button>
             <button class="primary-btn" data-add="shift">+ إضافة شفت</button>
           </div>
         </div>
@@ -178,6 +201,8 @@ const seedData = {
     { id: "c2", name: "Dehmy", amount: 288.5 },
     { id: "c3", name: "Abod", amount: 243 }
   ],
+  debts: [],
+  aggregation: { transactions: [] },
   fuel: [
     { id: "f1", date: "2026-07-02", amount: 95 },
     { id: "f2", date: "2026-07-07", amount: 52 }
@@ -294,6 +319,9 @@ function migrateState(data){
   next.version = 2;
   next.expenses ||= [];
   next.creditors ||= [];
+  next.debts ||= [];
+  next.aggregation ||= { transactions: [] };
+  next.aggregation.transactions ||= [];
   next.fuel ||= [];
   next.rewards ||= [];
   next.months ||= {};
@@ -367,6 +395,12 @@ function budgetSpent(b){ return deepTotal(b.entries||[]); }
 function budgetRemaining(b){ return Number(b.baseAmount||0)-budgetSpent(b); }
 function currentBudgets(){ const key=currentMonthKey(); return state.budgets.filter(b=>b.month===key); }
 function totalCurrentBudgetRemaining(){ return currentBudgets().reduce((s,b)=>s+budgetRemaining(b),0); }
+function aggregationTotals(){
+  const txs=state.aggregation?.transactions||[];
+  const added=txs.filter(x=>x.kind==='add').reduce((s,x)=>s+Number(x.amount||0),0);
+  const withdrawn=txs.filter(x=>x.kind==='withdraw').reduce((s,x)=>s+Number(x.amount||0),0);
+  return {added,withdrawn,balance:added-withdrawn};
+}
 function rewardExpensesTotal(){
   const rewardBudgets=state.budgets.filter(b=>String(b.name).includes('مكاف'));
   if(rewardBudgets.length) return rewardBudgets.reduce((s,b)=>s+budgetSpent(b),0);
@@ -381,8 +415,7 @@ function metrics(){
     marnDue,
     latestSalary,
     expenses,
-    budgetRemaining:totalCurrentBudgetRemaining(),
-    net:marnDue + totalCurrentBudgetRemaining() - deepTotal(state.creditors)
+    budgetRemaining:totalCurrentBudgetRemaining()
   };
 }
 function nextMarnPayDate(){
@@ -404,7 +437,6 @@ function render(){
 }
 function renderDashboard(){
   const m=metrics();
-  $('#netPosition').textContent=`${fmtMoney(m.net)} ر.س`;
   $('#marnDueKpi').textContent=fmtMoney(m.marnDue);
   $('#expensesKpi').textContent=fmtMoney(m.expenses);
   $('#latestSalaryKpi').textContent=fmtMoney(m.latestSalary.total);
@@ -463,8 +495,26 @@ function renderSalary(){
   });
   $('#creditorsTable').innerHTML=table(['الاسم','المبلغ','التراكمي',''],crRows);
 
+  const debtRows=state.debts.map(d=>{
+    const remaining=Math.max(0,Number(d.amount||0)-Number(d.paid||0));
+    const status=remaining<=0?'مسدد':Number(d.paid||0)>0?'جزئي':'غير مسدد';
+    const cls=remaining<=0?'positive':Number(d.paid||0)>0?'':'negative';
+    return `<tr>
+      <td>${escapeHtml(d.name)}</td>
+      <td>${fmtMoney(d.amount)}</td>
+      <td>${fmtMoney(d.paid)}</td>
+      <td class="${remaining>0?'negative':'positive'}">${fmtMoney(remaining)}</td>
+      <td>${d.dueDate?fmtDate(d.dueDate):'—'}</td>
+      <td>${statusBadge(status,cls)}</td>
+      <td>${actions('debt',d.id)}</td>
+    </tr>`;
+  });
+  $('#debtsTable').innerHTML=table(['الجهة / الشخص','المبلغ الأصلي','المدفوع','المتبقي','الاستحقاق','الحالة',''],debtRows);
+
+  renderAggregation();
+
   $('#incomeSummaryTable').innerHTML=table(
-    ['الشهر','المستحق','المستلم','الفرق','الحالة','ضمن المستحقات'],
+    ['الشهر','المستحق','المستلم','الفرق','الحالة','ضمن المستحقات',''],
     marnTotals().map(x=>{
       const st=monthStatus(state.months[x.name]);
       const diff=x.receivedAmount-x.total;
@@ -475,6 +525,7 @@ function renderSalary(){
         <td class="${diff<0?'negative':'positive'}">${fmtMoney(diff)}</td>
         <td>${statusBadge(st.label,st.cls)}</td>
         <td>${x.received?'لا':'نعم · '+fmtMoney(x.due)+' ر.س'}</td>
+        <td><button class="mini-btn" data-edit-month-settlement="${escapeHtml(x.name)}">تعديل الاستلام</button></td>
       </tr>`;
     })
   );
@@ -483,6 +534,40 @@ function renderSalary(){
   renderCustomTables();
   renderArchives();
 }
+function renderAggregation(){
+  const txs=(state.aggregation?.transactions||[]).slice().sort((a,b)=>{
+    const dc=String(a.date||'').localeCompare(String(b.date||''));
+    return dc!==0 ? -dc : String(b.id||'').localeCompare(String(a.id||''));
+  });
+  const totals=aggregationTotals();
+  $('#aggregationBalance').textContent=`${fmtMoney(totals.balance)} ر.س`;
+  $('#aggregationAdded').textContent=`${fmtMoney(totals.added)} ر.س`;
+  $('#aggregationWithdrawn').textContent=`${fmtMoney(totals.withdrawn)} ر.س`;
+
+  let running=0;
+  const chronological=(state.aggregation?.transactions||[]).slice().sort((a,b)=>{
+    const dc=String(a.date||'').localeCompare(String(b.date||''));
+    return dc!==0 ? dc : String(a.id||'').localeCompare(String(b.id||''));
+  });
+  const balances=new Map();
+  chronological.forEach(x=>{
+    running += x.kind==='withdraw' ? -Number(x.amount||0) : Number(x.amount||0);
+    balances.set(x.id,running);
+  });
+
+  const rows=txs.map(x=>`<tr>
+    <td>${x.date?fmtDate(x.date):'—'}</td>
+    <td>${statusBadge(x.kind==='withdraw'?'سحب':'إضافة',x.kind==='withdraw'?'negative':'positive')}</td>
+    <td>${escapeHtml(x.note||'بدون وصف')}</td>
+    <td class="amount ${x.kind==='withdraw'?'negative':'positive'}">${x.kind==='withdraw'?'-':'+'}${fmtMoney(x.amount)}</td>
+    <td class="amount">${fmtMoney(balances.get(x.id)||0)}</td>
+    <td><div class="row-actions"><button class="mini-btn" data-edit-aggregation="${x.id}">تعديل</button><button class="mini-btn" data-delete-aggregation="${x.id}">حذف</button></div></td>
+  </tr>`);
+  $('#aggregationTable').innerHTML=rows.length
+    ? table(['التاريخ','النوع','الوصف','المبلغ','الرصيد بعد الحركة',''],rows)
+    : '<div class="empty-state">لا توجد حركات تجميع بعد.</div>';
+}
+
 function renderBudgets(){
   const grid=$('#budgetsGrid');
   if(!state.budgets.length){
@@ -496,7 +581,7 @@ function renderBudgets(){
     return `<article class="budget-card">
       <div class="budget-head">
         <div><h4>${escapeHtml(b.name)}</h4><span>${escapeHtml(b.month)}</span></div>
-        <button class="mini-btn" data-delete-budget="${b.id}">حذف</button>
+        <div class="row-actions"><button class="mini-btn" data-edit-budget="${b.id}">تعديل</button><button class="mini-btn" data-delete-budget="${b.id}">حذف</button></div>
       </div>
       <div class="budget-stats">
         <div><span>المبلغ العام</span><strong>${fmtMoney(b.baseAmount)}</strong></div>
@@ -505,7 +590,7 @@ function renderBudgets(){
       </div>
       <button class="secondary-btn full" data-add-budget-entry="${b.id}">+ إضافة مبلغ/مصروف</button>
       <div class="budget-entries">
-        ${entries.length?entries.map(e=>`<div class="budget-entry"><span>${fmtDate(e.date)} · ${escapeHtml(e.note||'بدون وصف')}</span><strong>${fmtMoney(e.amount)} ر.س</strong><button class="mini-btn" data-delete-budget-entry="${b.id}" data-entry-id="${e.id}">×</button></div>`).join(''):'<span class="muted">لا توجد حركات بعد.</span>'}
+        ${entries.length?entries.map(e=>`<div class="budget-entry"><span>${fmtDate(e.date)} · ${escapeHtml(e.note||'بدون وصف')}</span><strong>${fmtMoney(e.amount)} ر.س</strong><div class="row-actions"><button class="mini-btn" data-edit-budget-entry="${b.id}" data-entry-id="${e.id}">تعديل</button><button class="mini-btn" data-delete-budget-entry="${b.id}" data-entry-id="${e.id}">حذف</button></div></div>`).join(''):'<span class="muted">لا توجد حركات بعد.</span>'}
       </div>
     </article>`;
   }).join('');
@@ -551,6 +636,7 @@ function renderCustomTables(){
         <div><h3>${escapeHtml(t.name)}</h3><p>${escapeHtml(ruleDescription(t))}</p></div>
         <div class="row-actions">
           <button class="primary-btn" data-add-custom-row="${t.id}">+ صف</button>
+          <button class="secondary-btn" data-edit-custom-table="${t.id}">تعديل الجدول</button>
           <button class="danger-btn" data-delete-custom-table="${t.id}">حذف الجدول</button>
         </div>
       </div>
@@ -672,6 +758,7 @@ function itemForm(type,item={}){
     const defs={
       expense:{title:'مصروف',fields:[['name','اسم البند','text'],['amount','المبلغ','number']]},
       creditor:{title:'دائن',fields:[['name','الاسم','text'],['amount','المبلغ','number']]},
+      debt:{title:'دين خاص بي',fields:[['name','الجهة أو الشخص','text'],['amount','المبلغ الأصلي','number'],['paid','المدفوع حتى الآن','number'],['dueDate','تاريخ الاستحقاق','date']]},
       fuel:{title:'بنزين',fields:[['date','التاريخ','date'],['amount','المبلغ','number']]},
       reward:{title:'مكافأة',fields:[['date','التاريخ','date'],['amount','المبلغ','number']]}
     }[type];
@@ -700,9 +787,10 @@ async function saveItem(type,item,fd){
     item.__edit?arr[item.index]=val:arr.push(val);
     arr.sort((a,b)=>a.date.localeCompare(b.date));
   } else {
-    const key={expense:'expenses',creditor:'creditors',fuel:'fuel',reward:'rewards'}[type];
+    const key={expense:'expenses',creditor:'creditors',debt:'debts',fuel:'fuel',reward:'rewards'}[type];
     const arr=state[key];
     const data={...fd,amount:Number(fd.amount)};
+    if(type==='debt') data.paid=Number(fd.paid||0);
     if(type==='reward'){
       data.received=item.received??false;
       data.n=item.n??Math.max(0,...arr.map(x=>x.n))+1;
@@ -722,7 +810,7 @@ async function removeItem(type,id){
     const t=state.customTables.find(x=>x.id===tableId);
     if(t) t.rows=t.rows.filter(r=>r.id!==rowId);
   } else {
-    const key={expense:'expenses',creditor:'creditors',fuel:'fuel',reward:'rewards'}[type];
+    const key={expense:'expenses',creditor:'creditors',debt:'debts',fuel:'fuel',reward:'rewards'}[type];
     state[key]=state[key].filter(x=>x.id!==id);
   }
   await persist(); render(); toast('تم الحذف');
@@ -740,15 +828,40 @@ function editItem(type,id){
     if(t&&row) openCustomRowForm(t,row);
     return;
   }
-  const key={expense:'expenses',creditor:'creditors',fuel:'fuel',reward:'rewards'}[type];
+  const key={expense:'expenses',creditor:'creditors',debt:'debts',fuel:'fuel',reward:'rewards'}[type];
   const x=state[key].find(x=>x.id===id);
   itemForm(type,{...x,__edit:true});
 }
 
-function openSettlementForm(){
-  const m=state.months[activeMonth];
+function openAggregationForm(tx=null){
+  openModal(`<form class="form" id="aggregationForm">
+    <h2>${tx?'تعديل حركة التجميع':'إضافة حركة تجميع'}</h2>
+    <label class="field"><span>نوع الحركة</span>
+      <select name="kind" required>
+        <option value="add" ${tx?.kind!=='withdraw'?'selected':''}>إضافة مبلغ</option>
+        <option value="withdraw" ${tx?.kind==='withdraw'?'selected':''}>سحب مبلغ</option>
+      </select>
+    </label>
+    <label class="field"><span>المبلغ</span><input name="amount" type="number" min="0.01" step="0.01" required value="${escapeHtml(tx?.amount??'')}"></label>
+    <label class="field"><span>التاريخ</span><input name="date" type="date" required value="${escapeHtml(tx?.date||new Date().toISOString().slice(0,10))}"></label>
+    <label class="field"><span>الوصف</span><input name="note" type="text" placeholder="مثال: توفير من راتب يوليو" value="${escapeHtml(tx?.note||'')}"></label>
+    <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
+  </form>`);
+  $('#cancelModal').onclick=closeModal;
+  $('#aggregationForm').onsubmit=async e=>{
+    e.preventDefault();
+    const fd=Object.fromEntries(new FormData(e.target));
+    const data={kind:fd.kind,amount:Number(fd.amount||0),date:fd.date,note:fd.note||''};
+    if(tx) Object.assign(tx,data);
+    else state.aggregation.transactions.push({id:uid('ag'),...data});
+    await persist(); closeModal(); render(); toast(tx?'تم تعديل حركة التجميع':'تمت إضافة حركة التجميع');
+  };
+}
+
+function openSettlementForm(monthName=activeMonth){
+  const m=state.months[monthName];
   openModal(`<form class="form" id="settlementForm">
-    <h2>تسجيل استلام ${escapeHtml(monthDisplayName(activeMonth,m))}</h2>
+    <h2>تسجيل استلام ${escapeHtml(monthDisplayName(monthName,m))}</h2>
     <p>المستحق المحسوب: <strong>${fmtMoney(monthExpected(m))} ر.س</strong></p>
     <label class="field"><span>المبلغ الذي استلمته فعلًا</span><input name="receivedAmount" type="number" min="0" step="0.01" required value="${Number(m.receivedAmount||0)}"></label>
     <label class="check-field"><input name="received" type="checkbox" ${m.received?'checked':''}><span>تم الاستلام وأريد إزالته من إجمالي المستحقات</span></label>
@@ -783,35 +896,37 @@ function openAddMonthForm(){
     await persist(); closeModal(); render(); toast('تمت إضافة الشهر');
   };
 }
-function openBudgetForm(){
+function openBudgetForm(budget=null){
   openModal(`<form class="form" id="budgetForm">
-    <h2>إضافة ميزانية شهرية</h2>
-    <p>مثال: مكافأة 990 ر.س أو بنزين 250 ر.س، وكل مصروف ينقص من المبلغ العام.</p>
-    <label class="field"><span>اسم الميزانية</span><input name="name" required placeholder="مثال: البنزين"></label>
-    <label class="field"><span>الشهر</span><input name="month" type="month" required value="${currentMonthKey()}"></label>
-    <label class="field"><span>المبلغ العام</span><input name="baseAmount" type="number" min="0" step="0.01" required></label>
+    <h2>${budget?'تعديل الميزانية':'إضافة ميزانية شهرية'}</h2>
+    <label class="field"><span>اسم الميزانية</span><input name="name" required value="${escapeHtml(budget?.name||'')}"></label>
+    <label class="field"><span>الشهر</span><input name="month" type="month" required value="${escapeHtml(budget?.month||currentMonthKey())}"></label>
+    <label class="field"><span>المبلغ العام</span><input name="baseAmount" type="number" min="0" step="0.01" required value="${escapeHtml(budget?.baseAmount??'')}"></label>
     <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
   </form>`);
   $('#cancelModal').onclick=closeModal;
   $('#budgetForm').onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target);
-    state.budgets.push({id:uid('b'),name:fd.get('name'),month:fd.get('month'),baseAmount:Number(fd.get('baseAmount')||0),entries:[]});
-    await persist(); closeModal(); render(); toast('تمت إضافة الميزانية');
+    const data={name:fd.get('name'),month:fd.get('month'),baseAmount:Number(fd.get('baseAmount')||0)};
+    if(budget) Object.assign(budget,data);
+    else state.budgets.push({id:uid('b'),...data,entries:[]});
+    await persist(); closeModal(); render(); toast(budget?'تم تعديل الميزانية':'تمت إضافة الميزانية');
   };
 }
-function openBudgetEntryForm(budget){
+function openBudgetEntryForm(budget,entry=null){
   openModal(`<form class="form" id="budgetEntryForm">
-    <h2>إضافة حركة إلى ${escapeHtml(budget.name)}</h2>
-    <label class="field"><span>التاريخ</span><input name="date" type="date" required value="${budget.month}-01"></label>
-    <label class="field"><span>الوصف</span><input name="note" required placeholder="مثال: تعبئة بنزين"></label>
-    <label class="field"><span>المبلغ</span><input name="amount" type="number" min="0" step="0.01" required></label>
-    <div class="form-actions"><button class="primary-btn" type="submit">إضافة</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
+    <h2>${entry?'تعديل حركة':'إضافة حركة إلى'} ${escapeHtml(budget.name)}</h2>
+    <label class="field"><span>التاريخ</span><input name="date" type="date" required value="${escapeHtml(entry?.date||`${budget.month}-01`)}"></label>
+    <label class="field"><span>الوصف</span><input name="note" required placeholder="مثال: تعبئة بنزين" value="${escapeHtml(entry?.note||'')}"></label>
+    <label class="field"><span>المبلغ</span><input name="amount" type="number" min="0" step="0.01" required value="${escapeHtml(entry?.amount??'')}"></label>
+    <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
   </form>`);
   $('#cancelModal').onclick=closeModal;
   $('#budgetEntryForm').onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target);
-    budget.entries.push({id:uid('be'),date:fd.get('date'),note:fd.get('note'),amount:Number(fd.get('amount')||0)});
-    await persist(); closeModal(); render(); toast('تمت إضافة الحركة');
+    const data={date:fd.get('date'),note:fd.get('note'),amount:Number(fd.get('amount')||0)};
+    if(entry) Object.assign(entry,data); else budget.entries.push({id:uid('be'),...data});
+    await persist(); closeModal(); render(); toast(entry?'تم تعديل الحركة':'تمت إضافة الحركة');
   };
 }
 function parseFields(spec){
@@ -821,23 +936,23 @@ function parseFields(spec){
     return {key:`c${i}`,label:labelRaw||`عمود ${i+1}`,type};
   }).filter(f=>f.label);
 }
-function openCustomTableForm(){
+function openCustomTableForm(existing=null){
   openModal(`<form class="form" id="customTableForm">
-    <h2>إنشاء جدول مخصص</h2>
+    <h2>${existing?'تعديل الجدول المخصص':'إنشاء جدول مخصص'}</h2>
     <p>صيغة الأعمدة: <code>الوصف:text, المبلغ:number, مدفوع:boolean</code></p>
-    <label class="field"><span>اسم الجدول</span><input name="name" required></label>
-    <label class="field"><span>الأعمدة</span><input name="fields" required placeholder="الاسم:text, المبلغ:number, الحالة:boolean"></label>
+    <label class="field"><span>اسم الجدول</span><input name="name" required value="${escapeHtml(existing?.name||'')}"></label>
+    <label class="field"><span>الأعمدة</span><input name="fields" required placeholder="الاسم:text, المبلغ:number, الحالة:boolean" value="${escapeHtml(existing?(existing.fields||[]).map(f=>`${f.label}:${f.type}`).join(', '):'')}"></label>
     <label class="field"><span>قاعدة الحساب</span>
       <select name="ruleType">
-        <option value="sum">جمع عمود المبلغ</option>
-        <option value="subtract">المبلغ الأساسي ناقص مجموع عمود</option>
-        <option value="conditional">إذا تحقق الشرط اجمع المبلغ، وإلا لا تضف شيئًا</option>
+        <option value="sum" ${existing?.rule?.type==='sum'?'selected':''}>جمع عمود المبلغ</option>
+        <option value="subtract" ${existing?.rule?.type==='subtract'?'selected':''}>المبلغ الأساسي ناقص مجموع عمود</option>
+        <option value="conditional" ${existing?.rule?.type==='conditional'?'selected':''}>إذا تحقق الشرط اجمع المبلغ، وإلا لا تضف شيئًا</option>
       </select>
     </label>
-    <label class="field"><span>اسم عمود المبلغ كما كتبته</span><input name="amountLabel" required placeholder="المبلغ"></label>
-    <label class="field"><span>المبلغ الأساسي (يستخدم مع الناقص)</span><input name="baseAmount" type="number" step="0.01" value="0"></label>
-    <label class="field"><span>اسم عمود الشرط (للقاعدة الشرطية)</span><input name="conditionLabel" placeholder="الحالة"></label>
-    <label class="field"><span>القيمة التي تحقق الشرط</span><input name="conditionValue" placeholder="true أو نعم"></label>
+    <label class="field"><span>اسم عمود المبلغ كما كتبته</span><input name="amountLabel" required placeholder="المبلغ" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.amountKey)?.label||'':'')}"></label>
+    <label class="field"><span>المبلغ الأساسي (يستخدم مع الناقص)</span><input name="baseAmount" type="number" step="0.01" value="${escapeHtml(existing?.rule?.baseAmount??0)}"></label>
+    <label class="field"><span>اسم عمود الشرط (للقاعدة الشرطية)</span><input name="conditionLabel" placeholder="الحالة" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.conditionKey)?.label||'':'')}"></label>
+    <label class="field"><span>القيمة التي تحقق الشرط</span><input name="conditionValue" placeholder="true أو نعم" value="${escapeHtml(existing?.rule?.conditionValue||'')}"></label>
     <div class="form-actions"><button class="primary-btn" type="submit">إنشاء الجدول</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
   </form>`);
   $('#cancelModal').onclick=closeModal;
@@ -846,8 +961,8 @@ function openCustomTableForm(){
     const amountField=fields.find(f=>f.label===fd.get('amountLabel'));
     if(!amountField){toast('اسم عمود المبلغ غير مطابق للأعمدة');return;}
     const conditionField=fields.find(f=>f.label===fd.get('conditionLabel'));
-    state.customTables.push({
-      id:uid('t'), name:fd.get('name'), fields, rows:[],
+    const tableData={
+      name:fd.get('name'), fields,
       rule:{
         type:fd.get('ruleType'),
         amountKey:amountField.key,
@@ -855,8 +970,17 @@ function openCustomTableForm(){
         conditionKey:conditionField?.key||'',
         conditionValue:fd.get('conditionValue')||'true'
       }
-    });
-    await persist(); closeModal(); render(); toast('تم إنشاء الجدول');
+    };
+    if(existing){
+      const oldFields=existing.fields||[];
+      existing.rows=(existing.rows||[]).map(row=>{
+        const migrated={id:row.id};
+        fields.forEach((f,i)=>{ migrated[f.key]=row[oldFields[i]?.key] ?? (f.type==='boolean'?false:f.type==='number'?0:''); });
+        return migrated;
+      });
+      Object.assign(existing,tableData);
+    } else state.customTables.push({id:uid('t'),...tableData,rows:[]});
+    await persist(); closeModal(); render(); toast(existing?'تم تعديل الجدول':'تم إنشاء الجدول');
   };
 }
 function openCustomRowForm(t,row=null){
@@ -881,6 +1005,48 @@ function openCustomRowForm(t,row=null){
     await persist(); closeModal(); render(); toast('تم حفظ الصف');
   };
 }
+function openEditMonthForm(){
+  const m=state.months[activeMonth];
+  if(!m){ toast('لا يوجد شهر محدد'); return; }
+  const currentKey=monthKeyFor(activeMonth,m);
+  openModal(`<form class="form" id="editMonthForm">
+    <h2>تعديل الشهر</h2>
+    <label class="field"><span>اسم الشهر</span><input name="name" required value="${escapeHtml(activeMonth)}"></label>
+    <label class="field"><span>الشهر والتاريخ</span><input name="monthKey" type="month" required value="${escapeHtml(currentKey)}"></label>
+    <label class="field"><span>سعر الساعة الافتراضي</span><input name="rate" type="number" min="0" step="0.01" value="${escapeHtml(m.rate??0)}"></label>
+    <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
+  </form>`);
+  $('#cancelModal').onclick=closeModal;
+  $('#editMonthForm').onsubmit=async e=>{
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const newName=String(fd.get('name')||'').trim();
+    const newKey=String(fd.get('monthKey')||'');
+    if(!newName){ toast('اكتب اسم الشهر'); return; }
+    if(newName!==activeMonth && state.months[newName]){ toast('يوجد شهر بهذا الاسم مسبقًا'); return; }
+    const oldName=activeMonth;
+    const updated={...m,rate:Number(fd.get('rate')||0)};
+    updated.shifts=(updated.shifts||[]).map(sh=>{
+      const day=String(sh.date||'').slice(-2);
+      return {...sh,date:`${newKey}-${day}`};
+    });
+    if(newName!==oldName){
+      delete state.months[oldName];
+      state.months[newName]=updated;
+      activeMonth=newName;
+    } else state.months[oldName]=updated;
+    await persist(); closeModal(); render(); toast('تم تعديل الشهر');
+  };
+}
+
+async function deleteActiveMonth(){
+  if(!activeMonth||!state.months[activeMonth]){ toast('لا يوجد شهر محدد'); return; }
+  if(!confirm('حذف الشهر الحالي وكل شفتاته وبيانات الاستلام؟')) return;
+  delete state.months[activeMonth];
+  activeMonth=getLatestMonthKey();
+  await persist(); render(); toast('تم حذف الشهر');
+}
+
 async function archiveMonth(month=currentMonthKey(), automatic=false){
   if(state.salaryArchives.some(a=>a.month===month)) {
     if(!automatic) toast('هذا الشهر مؤرشف مسبقًا');
@@ -983,14 +1149,34 @@ document.addEventListener('click',async e=>{
   const month=e.target.closest('[data-month]');
   const toggle=e.target.closest('[data-toggle-reward]');
   const addBudgetEntry=e.target.closest('[data-add-budget-entry]');
+  const editBudget=e.target.closest('[data-edit-budget]');
   const deleteBudget=e.target.closest('[data-delete-budget]');
+  const editBudgetEntry=e.target.closest('[data-edit-budget-entry]');
   const deleteBudgetEntry=e.target.closest('[data-delete-budget-entry]');
   const addCustomRow=e.target.closest('[data-add-custom-row]');
+  const editCustomTable=e.target.closest('[data-edit-custom-table]');
   const deleteCustomTable=e.target.closest('[data-delete-custom-table]');
+  const editMonthSettlement=e.target.closest('[data-edit-month-settlement]');
+  const editAggregation=e.target.closest('[data-edit-aggregation]');
+  const deleteAggregation=e.target.closest('[data-delete-aggregation]');
 
   if(del) removeItem(del.dataset.delete,del.dataset.id);
   if(edit) editItem(edit.dataset.edit,edit.dataset.id);
   if(month){activeMonth=month.dataset.month;renderMarn();}
+  if(editMonthSettlement){
+    const monthName=editMonthSettlement.dataset.editMonthSettlement;
+    if(state.months[monthName]) openSettlementForm(monthName);
+  }
+  if(editAggregation){
+    const tx=state.aggregation.transactions.find(x=>x.id===editAggregation.dataset.editAggregation);
+    if(tx) openAggregationForm(tx);
+  }
+  if(deleteAggregation){
+    if(confirm('حذف حركة التجميع؟')){
+      state.aggregation.transactions=state.aggregation.transactions.filter(x=>x.id!==deleteAggregation.dataset.deleteAggregation);
+      await persist(); render(); toast('تم حذف حركة التجميع');
+    }
+  }
   if(toggle){
     const r=state.rewards.find(x=>x.id===toggle.dataset.toggleReward);
     r.received=!r.received; await persist(); render();
@@ -999,11 +1185,20 @@ document.addEventListener('click',async e=>{
     const b=state.budgets.find(x=>x.id===addBudgetEntry.dataset.addBudgetEntry);
     if(b) openBudgetEntryForm(b);
   }
+  if(editBudget){
+    const b=state.budgets.find(x=>x.id===editBudget.dataset.editBudget);
+    if(b) openBudgetForm(b);
+  }
   if(deleteBudget){
     if(confirm('حذف الميزانية وكل حركاتها؟')){
       state.budgets=state.budgets.filter(x=>x.id!==deleteBudget.dataset.deleteBudget);
       await persist(); render();
     }
+  }
+  if(editBudgetEntry){
+    const b=state.budgets.find(x=>x.id===editBudgetEntry.dataset.editBudgetEntry);
+    const entry=b?.entries?.find(x=>x.id===editBudgetEntry.dataset.entryId);
+    if(b&&entry) openBudgetEntryForm(b,entry);
   }
   if(deleteBudgetEntry){
     const b=state.budgets.find(x=>x.id===deleteBudgetEntry.dataset.deleteBudgetEntry);
@@ -1015,6 +1210,10 @@ document.addEventListener('click',async e=>{
   if(addCustomRow){
     const t=state.customTables.find(x=>x.id===addCustomRow.dataset.addCustomRow);
     if(t) openCustomRowForm(t);
+  }
+  if(editCustomTable){
+    const t=state.customTables.find(x=>x.id===editCustomTable.dataset.editCustomTable);
+    if(t) openCustomTableForm(t);
   }
   if(deleteCustomTable){
     if(confirm('حذف الجدول وكل صفوفه؟')){
@@ -1029,8 +1228,11 @@ $('#openAuthBtn').onclick=()=>{ location.href='index.html'; };
 $('#settingsAuthBtn').onclick=()=>{ location.href='index.html'; };
 $('#logoutBtn').onclick=()=>firebase?.signOut(firebase.auth);
 $('#addMonthBtn').onclick=openAddMonthForm;
-$('#addBudgetBtn').onclick=openBudgetForm;
+$('#editMonthBtn').onclick=openEditMonthForm;
+$('#deleteMonthBtn').onclick=deleteActiveMonth;
+$('#addBudgetBtn').onclick=()=>openBudgetForm();
 $('#addCustomTableBtn').onclick=openCustomTableForm;
+$('#addAggregationBtn').onclick=()=>openAggregationForm();
 $('#archiveMonthBtn').onclick=()=>archiveMonth(currentMonthKey(),false);
 $('#exportBtn').onclick=()=>{
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
