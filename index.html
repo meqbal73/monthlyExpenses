@@ -119,8 +119,7 @@
       return `حدث خطأ في تسجيل الدخول (${code || 'unknown'}).`;
     }
 
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
+    const firebaseConfig = {
   apiKey: "AIzaSyDp6RHQkVZNPXXGPguuwNCzONYC4uAQee8",
   authDomain: "monthlyexpenses-2e3f4.firebaseapp.com",
   databaseURL: "https://monthlyexpenses-2e3f4-default-rtdb.firebaseio.com",
@@ -130,6 +129,7 @@ const firebaseConfig = {
   appId: "1:14644698781:web:4948735a38ecf44e5dbe74",
   measurementId: "G-50ZHG9C2JC"
 };
+
     async function initFirebase(){
       try {
         const appMod = await import('https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js');

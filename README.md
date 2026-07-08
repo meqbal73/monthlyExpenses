@@ -1,50 +1,19 @@
-# My Finance Dashboard
+# My Finance v2
 
-تطبيق ويب مالي شخصي تم تحويل بياناته الأولية من ملف Excel إلى واجهة متجاوبة تعمل على GitHub Pages، ويمكنها استخدام Firebase Authentication + Cloud Firestore للمزامنة السحابية.
+نسخة محدثة من لوحة المصروفات، وتشمل:
 
-## المزايا
-- Dashboard ملخص مالي.
-- المصروفات والمتبقي من المكافأة.
-- الدائنون والبنزين.
-- دخل مرن حسب الشهر مع الشفتات والساعات والمبالغ.
-- جدول مكافآت الجامعة، حالة الاستلام، والعد التنازلي.
-- إضافة، تعديل، حذف.
-- Dark / Light mode.
-- تصدير واستيراد JSON.
-- LocalStorage تلقائيًا عند عدم تفعيل Firebase.
-- Firebase Authentication وCloud Firestore عند إعداد المشروع.
+- مستحقات مرن غير المستلمة فقط في الشاشة الرئيسية.
+- تسجيل مبلغ الاستلام لكل شهر ومقارنة كامل/ناقص/زايد.
+- زر تم الاستلام لإزالة الشهر من إجمالي المستحقات.
+- إضافة أشهر جديدة من داخل الموقع.
+- عداد راتب مرن القادم يوم 15 ميلادي.
+- المكافأة القادمة فقط بدل المكافآت المتبقية.
+- ميزانيات شهرية عامة قابلة للخصم مثل المكافأة والبنزين.
+- جداول مخصصة بأعمدة يحددها المستخدم وقواعد جمع أو طرح أو شرط.
+- أرشفة شهرية للميزانيات والمستحقات ونتائج الجداول المخصصة.
 
-## تشغيله على GitHub Pages
-1. ارفع جميع الملفات إلى مستودع GitHub.
-2. من Settings > Pages اختر النشر من Branch.
-3. اختر `main` و `/root` ثم Save.
+## GitHub Pages
+ارفع الملفات الموجودة داخل هذا المجلد إلى جذر المستودع.
 
-## ربط Firebase
-1. أنشئ مشروع Firebase وسجّل Web App.
-2. افتح `firebase-config.js` والصق قيم firebaseConfig.
-3. من Authentication فعّل Email/Password.
-4. أنشئ Firestore Database.
-5. انشر قواعد Firestore الموجودة في `firestore.rules`.
-
-باستخدام Firebase CLI:
-
-```bash
-npm install -g firebase-tools
-firebase login
-firebase use --add
-firebase deploy --only firestore:rules
-```
-
-للنشر أيضًا على Firebase Hosting:
-
-```bash
-firebase deploy --only hosting
-```
-
-> مهم: لا ترفع Service Account أو أي private key إلى GitHub. إعدادات Web App العادية ليست بديلًا عن قواعد Firestore الآمنة.
-
-
-## Page flow
-- `index.html`: Authentication first page.
-- `dashboard.html`: Finance dashboard after sign-in.
-- `auth.html`: Redirects to `index.html` for compatibility.
+## Firebase
+إعدادات Firebase موجودة داخل `index.html` و`dashboard.html` حسب المشروع الحالي. لا تغيرها إلا عند الانتقال إلى مشروع Firebase آخر.
