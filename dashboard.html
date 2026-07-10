@@ -352,22 +352,43 @@ function migrateState(data){
     ];
   }
   next.customTables ||= [];
-  // ترقية جدول الماء القديم: لكل صف مبلغ مستقل، والخصم يتم فقط عند تفعيل "تم".
+  // جدول الماء: مبلغ أساسي، وكل صف يملك مبلغ خصم مستقل. لا يخصم إلا عند تفعيل "تم".
+  let waterTable=next.customTables.find(t=>/ماء|الماء|water/i.test(String(t.name||'')));
+  if(!waterTable){
+    waterTable={
+      id:'table-water',
+      name:'الماء',
+      fields:[
+        {key:'week',label:'الأسبوع',type:'text'},
+        {key:'done',label:'تم',type:'boolean'},
+        {key:'deduction',label:'مبلغ الخصم',type:'number'}
+      ],
+      rule:{type:'conditionalSubtract',amountKey:'deduction',conditionKey:'done',conditionValue:'true',baseAmount:440},
+      rows:[1,2,3,4,5,6,7].map(n=>({id:`water-${n}`,week:`الأسبوع ${n}`,done:false,deduction:0}))
+    };
+    next.customTables.push(waterTable);
+  }
+  // ترقية أي جدول ماء قديم بدون استخدام عمود الأسبوع كأنه مبلغ.
   next.customTables.forEach(t=>{
     const isWater=/ماء|الماء|water/i.test(String(t.name||''));
     if(!isWater) return;
     t.fields ||= [];
-    let amountField=t.fields.find(f=>f.type==='number');
+    t.rows ||= [];
+    let amountField=t.fields.find(f=>f.type==='number' && /مبلغ|خصم|amount|deduct/i.test(String(f.label||'')));
     if(!amountField){
-      amountField={key:`c${t.fields.length}`,label:'المبلغ',type:'number'};
+      amountField={key:`c${t.fields.length}`,label:'مبلغ الخصم',type:'number'};
       t.fields.push(amountField);
-      (t.rows||[]).forEach(r=>{ if(r[amountField.key]==null) r[amountField.key]=0; });
+      t.rows.forEach(r=>{ if(r[amountField.key]==null) r[amountField.key]=0; });
+    } else {
+      amountField.label='مبلغ الخصم';
     }
-    let conditionField=t.fields.find(f=>f.type==='boolean');
+    let conditionField=t.fields.find(f=>f.type==='boolean' && /تم|حالة|done|paid/i.test(String(f.label||''))) || t.fields.find(f=>f.type==='boolean');
     if(!conditionField){
       conditionField={key:`c${t.fields.length}`,label:'تم',type:'boolean'};
       t.fields.push(conditionField);
-      (t.rows||[]).forEach(r=>{ if(r[conditionField.key]==null) r[conditionField.key]=false; });
+      t.rows.forEach(r=>{ if(r[conditionField.key]==null) r[conditionField.key]=false; });
+    } else {
+      conditionField.label='تم';
     }
     t.rule={
       ...(t.rule||{}),
@@ -375,7 +396,7 @@ function migrateState(data){
       amountKey:amountField.key,
       conditionKey:conditionField.key,
       conditionValue:'true',
-      baseAmount:Number(t.rule?.baseAmount||440)
+      baseAmount:Number(t.rule?.baseAmount ?? 440)
     };
   });
   next.salaryArchives ||= [];
