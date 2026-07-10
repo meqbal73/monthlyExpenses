@@ -352,6 +352,32 @@ function migrateState(data){
     ];
   }
   next.customTables ||= [];
+  // ترقية جدول الماء القديم: لكل صف مبلغ مستقل، والخصم يتم فقط عند تفعيل "تم".
+  next.customTables.forEach(t=>{
+    const isWater=/ماء|الماء|water/i.test(String(t.name||''));
+    if(!isWater) return;
+    t.fields ||= [];
+    let amountField=t.fields.find(f=>f.type==='number');
+    if(!amountField){
+      amountField={key:`c${t.fields.length}`,label:'المبلغ',type:'number'};
+      t.fields.push(amountField);
+      (t.rows||[]).forEach(r=>{ if(r[amountField.key]==null) r[amountField.key]=0; });
+    }
+    let conditionField=t.fields.find(f=>f.type==='boolean');
+    if(!conditionField){
+      conditionField={key:`c${t.fields.length}`,label:'تم',type:'boolean'};
+      t.fields.push(conditionField);
+      (t.rows||[]).forEach(r=>{ if(r[conditionField.key]==null) r[conditionField.key]=false; });
+    }
+    t.rule={
+      ...(t.rule||{}),
+      type:'conditionalSubtract',
+      amountKey:amountField.key,
+      conditionKey:conditionField.key,
+      conditionValue:'true',
+      baseAmount:Number(t.rule?.baseAmount||440)
+    };
+  });
   next.salaryArchives ||= [];
   return next;
 }
@@ -601,6 +627,17 @@ function computeCustomTable(t){
   const amountKey=t.rule?.amountKey;
   const nums=rows.map(r=>Number(r[amountKey]||0));
   if(t.rule?.type==='subtract') return Number(t.rule.baseAmount||0)-nums.reduce((a,b)=>a+b,0);
+  if(t.rule?.type==='conditionalSubtract'){
+    const deducted=rows.reduce((sum,r)=>{
+      const raw=r[t.rule.conditionKey];
+      const expected=String(t.rule.conditionValue??'true').trim().toLowerCase();
+      const actual=String(raw).trim().toLowerCase();
+      const truthy=raw===true || actual==='true' || actual==='نعم' || actual==='تم' || actual==='1';
+      const match=expected==='true' ? truthy : actual===expected;
+      return sum+(match?Number(r[amountKey]||0):0);
+    },0);
+    return Number(t.rule.baseAmount||0)-deducted;
+  }
   if(t.rule?.type==='conditional'){
     return rows.reduce((sum,r)=>{
       const raw=r[t.rule.conditionKey];
@@ -617,6 +654,10 @@ function ruleDescription(t){
   const r=t.rule||{};
   const amountField=(t.fields||[]).find(f=>f.key===r.amountKey)?.label||'المبلغ';
   if(r.type==='subtract') return `المعادلة: ${fmtMoney(r.baseAmount)} - مجموع ${amountField}`;
+  if(r.type==='conditionalSubtract'){
+    const cf=(t.fields||[]).find(f=>f.key===r.conditionKey)?.label||'تم';
+    return `المتبقي = ${fmtMoney(r.baseAmount)} - ${amountField} للصفوف التي فيها ${cf} = تم`;
+  }
   if(r.type==='conditional'){
     const cf=(t.fields||[]).find(f=>f.key===r.conditionKey)?.label||'الشرط';
     return `يجمع ${amountField} فقط إذا كان ${cf} = ${r.conditionValue}`;
@@ -947,12 +988,13 @@ function openCustomTableForm(existing=null){
       <select name="ruleType">
         <option value="sum" ${existing?.rule?.type==='sum'?'selected':''}>جمع عمود المبلغ</option>
         <option value="subtract" ${existing?.rule?.type==='subtract'?'selected':''}>المبلغ الأساسي ناقص مجموع عمود</option>
+        <option value="conditionalSubtract" ${existing?.rule?.type==='conditionalSubtract'?'selected':''}>إذا كان تم: اطرح مبلغ الصف من المبلغ الأساسي</option>
         <option value="conditional" ${existing?.rule?.type==='conditional'?'selected':''}>إذا تحقق الشرط اجمع المبلغ، وإلا لا تضف شيئًا</option>
       </select>
     </label>
     <label class="field"><span>اسم عمود المبلغ كما كتبته</span><input name="amountLabel" required placeholder="المبلغ" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.amountKey)?.label||'':'')}"></label>
-    <label class="field"><span>المبلغ الأساسي (يستخدم مع الناقص)</span><input name="baseAmount" type="number" step="0.01" value="${escapeHtml(existing?.rule?.baseAmount??0)}"></label>
-    <label class="field"><span>اسم عمود الشرط (للقاعدة الشرطية)</span><input name="conditionLabel" placeholder="الحالة" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.conditionKey)?.label||'':'')}"></label>
+    <label class="field"><span>المبلغ الأساسي (للناقص أو الخصم عند تم)</span><input name="baseAmount" type="number" step="0.01" value="${escapeHtml(existing?.rule?.baseAmount??0)}"></label>
+    <label class="field"><span>اسم عمود الشرط (مثل: تم)</span><input name="conditionLabel" placeholder="الحالة" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.conditionKey)?.label||'':'')}"></label>
     <label class="field"><span>القيمة التي تحقق الشرط</span><input name="conditionValue" placeholder="true أو نعم" value="${escapeHtml(existing?.rule?.conditionValue||'')}"></label>
     <div class="form-actions"><button class="primary-btn" type="submit">إنشاء الجدول</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
   </form>`);
