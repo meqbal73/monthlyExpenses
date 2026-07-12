@@ -10,6 +10,12 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
+<style>
+.inline-check{display:inline-flex;align-items:center;gap:.45rem;cursor:pointer;font-weight:700;user-select:none}
+.inline-check input{width:20px;height:20px;accent-color:var(--primary,#6c63ff);cursor:pointer}
+.inline-number{width:110px;max-width:100%;padding:.55rem .65rem;border:1px solid var(--border,#d8dbe8);border-radius:10px;background:var(--surface,#fff);color:inherit;font:inherit}
+.debt-summary{margin-bottom:1rem}
+</style>
 </head>
 <body>
   <div class="app-shell">
@@ -543,6 +549,14 @@ function renderSalary(){
   });
   $('#creditorsTable').innerHTML=table(['الاسم','المبلغ','التراكمي',''],crRows);
 
+  const debtTotals=state.debts.reduce((acc,d)=>{
+    const full=Number(d.amount||0);
+    const paid=Math.max(0,Number(d.paid||0));
+    acc.full+=full;
+    acc.paid+=paid;
+    acc.remaining+=Math.max(0,full-paid);
+    return acc;
+  },{full:0,paid:0,remaining:0});
   const debtRows=state.debts.map(d=>{
     const remaining=Math.max(0,Number(d.amount||0)-Number(d.paid||0));
     const status=remaining<=0?'مسدد':Number(d.paid||0)>0?'جزئي':'غير مسدد';
@@ -552,12 +566,17 @@ function renderSalary(){
       <td>${fmtMoney(d.amount)}</td>
       <td>${fmtMoney(d.paid)}</td>
       <td class="${remaining>0?'negative':'positive'}">${fmtMoney(remaining)}</td>
-      <td>${d.dueDate?fmtDate(d.dueDate):'—'}</td>
       <td>${statusBadge(status,cls)}</td>
       <td>${actions('debt',d.id)}</td>
     </tr>`;
   });
-  $('#debtsTable').innerHTML=table(['الجهة / الشخص','المبلغ الأصلي','المدفوع','المتبقي','الاستحقاق','الحالة',''],debtRows);
+  $('#debtsTable').innerHTML=`
+    <div class="budget-stats debt-summary">
+      <div><span>إجمالي الديون</span><strong>${fmtMoney(debtTotals.full)}</strong></div>
+      <div><span>إجمالي المدفوع</span><strong class="positive">${fmtMoney(debtTotals.paid)}</strong></div>
+      <div><span>إجمالي المتبقي</span><strong class="negative">${fmtMoney(debtTotals.remaining)}</strong></div>
+    </div>
+    ${table(['الجهة / الشخص','المبلغ الكامل','المدفوع','المتبقي','الحالة',''],debtRows)}`;
 
   renderAggregation();
 
@@ -638,7 +657,11 @@ function renderBudgets(){
       </div>
       <button class="secondary-btn full" data-add-budget-entry="${b.id}">+ إضافة مبلغ/مصروف</button>
       <div class="budget-entries">
-        ${entries.length?entries.map(e=>`<div class="budget-entry"><span>${fmtDate(e.date)} · ${escapeHtml(e.note||'بدون وصف')}</span><strong>${fmtMoney(e.amount)} ر.س</strong><div class="row-actions"><button class="mini-btn" data-edit-budget-entry="${b.id}" data-entry-id="${e.id}">تعديل</button><button class="mini-btn" data-delete-budget-entry="${b.id}" data-entry-id="${e.id}">حذف</button></div></div>`).join(''):'<span class="muted">لا توجد حركات بعد.</span>'}
+        ${entries.length?entries.map(e=>{
+          const isFuel=/بنزين|وقود|fuel/i.test(String(b.name||''));
+          const label=isFuel?fmtDate(e.date):`${fmtDate(e.date)} · ${escapeHtml(e.note||'بدون وصف')}`;
+          return `<div class="budget-entry"><span>${label}</span><strong>${fmtMoney(e.amount)} ر.س</strong><div class="row-actions"><button class="mini-btn" data-edit-budget-entry="${b.id}" data-entry-id="${e.id}">تعديل</button><button class="mini-btn" data-delete-budget-entry="${b.id}" data-entry-id="${e.id}">حذف</button></div></div>`;
+        }).join(''):'<span class="muted">لا توجد حركات بعد.</span>'}
       </div>
     </article>`;
   }).join('');
@@ -693,7 +716,16 @@ function renderCustomTables(){
   }
   wrap.innerHTML=state.customTables.map(t=>{
     const headers=(t.fields||[]).map(f=>f.label);
-    const rows=(t.rows||[]).map(r=>`<tr>${(t.fields||[]).map(f=>`<td>${f.type==='boolean'?(r[f.key]?'✅ نعم':'❌ لا'):escapeHtml(r[f.key]??'')}</td>`).join('')}<td>${actions('customRow',`${t.id}::${r.id}`)}</td></tr>`);
+    const isWater=/ماء|الماء|water/i.test(String(t.name||''));
+    const rows=(t.rows||[]).map(r=>`<tr>${(t.fields||[]).map(f=>{
+      if(f.type==='boolean'){
+        return `<td><label class="inline-check"><input type="checkbox" data-custom-checkbox="1" data-table-id="${t.id}" data-row-id="${r.id}" data-field-key="${f.key}" ${r[f.key]?'checked':''}><span>تم</span></label></td>`;
+      }
+      if(isWater && f.type==='number' && f.key===t.rule?.amountKey){
+        return `<td><input class="inline-number" type="number" min="0" step="0.01" value="${escapeHtml(r[f.key]??0)}" data-custom-number="1" data-table-id="${t.id}" data-row-id="${r.id}" data-field-key="${f.key}" aria-label="مبلغ الخصم"></td>`;
+      }
+      return `<td>${escapeHtml(r[f.key]??'')}</td>`;
+    }).join('')}<td>${actions('customRow',`${t.id}::${r.id}`)}</td></tr>`);
     return `<article class="custom-table-card">
       <div class="panel-head">
         <div><h3>${escapeHtml(t.name)}</h3><p>${escapeHtml(ruleDescription(t))}</p></div>
@@ -821,7 +853,7 @@ function itemForm(type,item={}){
     const defs={
       expense:{title:'مصروف',fields:[['name','اسم البند','text'],['amount','المبلغ','number']]},
       creditor:{title:'دائن',fields:[['name','الاسم','text'],['amount','المبلغ','number']]},
-      debt:{title:'دين خاص بي',fields:[['name','الجهة أو الشخص','text'],['amount','المبلغ الأصلي','number'],['paid','المدفوع حتى الآن','number'],['dueDate','تاريخ الاستحقاق','date']]},
+      debt:{title:'دين خاص بي',fields:[['name','الجهة أو الشخص','text'],['amount','المبلغ الكامل','number'],['paid','المدفوع حتى الآن','number']]},
       fuel:{title:'بنزين',fields:[['date','التاريخ','date'],['amount','المبلغ','number']]},
       reward:{title:'مكافأة',fields:[['date','التاريخ','date'],['amount','المبلغ','number']]}
     }[type];
@@ -977,17 +1009,18 @@ function openBudgetForm(budget=null){
   };
 }
 function openBudgetEntryForm(budget,entry=null){
+  const isFuel=/بنزين|وقود|fuel/i.test(String(budget.name||''));
   openModal(`<form class="form" id="budgetEntryForm">
     <h2>${entry?'تعديل حركة':'إضافة حركة إلى'} ${escapeHtml(budget.name)}</h2>
     <label class="field"><span>التاريخ</span><input name="date" type="date" required value="${escapeHtml(entry?.date||`${budget.month}-01`)}"></label>
-    <label class="field"><span>الوصف</span><input name="note" required placeholder="مثال: تعبئة بنزين" value="${escapeHtml(entry?.note||'')}"></label>
+    ${isFuel?'':`<label class="field"><span>الوصف</span><input name="note" required placeholder="مثال: مصروف شهري" value="${escapeHtml(entry?.note||'')}"></label>`}
     <label class="field"><span>المبلغ</span><input name="amount" type="number" min="0" step="0.01" required value="${escapeHtml(entry?.amount??'')}"></label>
     <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
   </form>`);
   $('#cancelModal').onclick=closeModal;
   $('#budgetEntryForm').onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target);
-    const data={date:fd.get('date'),note:fd.get('note'),amount:Number(fd.get('amount')||0)};
+    const data={date:fd.get('date'),note:isFuel?'':String(fd.get('note')||''),amount:Number(fd.get('amount')||0)};
     if(entry) Object.assign(entry,data); else budget.entries.push({id:uid('be'),...data});
     await persist(); closeModal(); render(); toast(entry?'تم تعديل الحركة':'تمت إضافة الحركة');
   };
@@ -1286,6 +1319,32 @@ document.addEventListener('click',async e=>{
     }
   }
 });
+document.addEventListener('change',async e=>{
+  const checkbox=e.target.closest('[data-custom-checkbox]');
+  if(checkbox){
+    const t=state.customTables.find(x=>x.id===checkbox.dataset.tableId);
+    const row=t?.rows?.find(x=>x.id===checkbox.dataset.rowId);
+    if(t&&row){
+      row[checkbox.dataset.fieldKey]=checkbox.checked;
+      await persist();
+      render();
+      toast(checkbox.checked?'تم الخصم':'تم إلغاء الخصم');
+    }
+    return;
+  }
+  const numberInput=e.target.closest('[data-custom-number]');
+  if(numberInput){
+    const t=state.customTables.find(x=>x.id===numberInput.dataset.tableId);
+    const row=t?.rows?.find(x=>x.id===numberInput.dataset.rowId);
+    if(t&&row){
+      row[numberInput.dataset.fieldKey]=Math.max(0,Number(numberInput.value||0));
+      await persist();
+      render();
+      toast('تم تحديث مبلغ الخصم');
+    }
+  }
+});
+
 $('#modalClose').onclick=closeModal;
 $('#modalBackdrop').onclick=e=>{if(e.target===e.currentTarget)closeModal();};
 $('#openAuthBtn').onclick=()=>{ location.href='index.html'; };
