@@ -27,3 +27,8 @@
 .calendar-day small{font-size:.72rem;color:var(--muted,#64748b)}
 .table-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
 @media(max-width:640px){.calendar-grid{gap:4px}.calendar-day{min-height:58px;padding:5px}.calendar-day small{font-size:.62rem}.calendar-nav strong{min-width:120px}.table-summary{align-items:flex-start;flex-direction:column}}
+.inline-check.compact{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;cursor:pointer}
+.inline-check.compact input{width:18px;height:18px;accent-color:#7c3aed;cursor:pointer}
+.dashboard-grid .attendance-calendar-panel{margin-top:0;min-width:0}
+.dashboard-grid .calendar-day{min-height:64px}
+@media(max-width:900px){.dashboard-grid .attendance-calendar-panel{grid-column:1/-1}}
