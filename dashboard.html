@@ -655,8 +655,8 @@ function computeCustomTable(t){
   const amountKey=t.rule?.amountKey;
   const nums=rows.map(r=>Number(r[amountKey]||0));
   if(t.rule?.type==='subtract') return Number(t.rule.baseAmount||0)-nums.reduce((a,b)=>a+b,0);
-  if(t.rule?.type==='conditional'){
-    return rows.reduce((sum,r)=>{
+  if(t.rule?.type==='conditional' || t.rule?.type==='conditionalSubtract'){
+    const matchedTotal=rows.reduce((sum,r)=>{
       const raw=r[t.rule.conditionKey];
       const expected=String(t.rule.conditionValue??'true').trim().toLowerCase();
       const actual=String(raw).trim().toLowerCase();
@@ -664,6 +664,8 @@ function computeCustomTable(t){
       const match=expected==='true' ? truthy : actual===expected;
       return sum+(match?Number(r[amountKey]||0):0);
     },0);
+    if(t.rule.type==='conditionalSubtract') return Number(t.rule.baseAmount||0)-matchedTotal;
+    return matchedTotal;
   }
   return nums.reduce((a,b)=>a+b,0);
 }
@@ -671,8 +673,9 @@ function ruleDescription(t){
   const r=t.rule||{};
   const amountField=(t.fields||[]).find(f=>f.key===r.amountKey)?.label||'المبلغ';
   if(r.type==='subtract') return `المعادلة: ${fmtMoney(r.baseAmount)} - مجموع ${amountField}`;
-  if(r.type==='conditional'){
+  if(r.type==='conditional' || r.type==='conditionalSubtract'){
     const cf=(t.fields||[]).find(f=>f.key===r.conditionKey)?.label||'الشرط';
+    if(r.type==='conditionalSubtract') return `المعادلة: ${fmtMoney(r.baseAmount)} - ${amountField} للصفوف التي تحقق ${cf} = ${r.conditionValue}`;
     return `يجمع ${amountField} فقط إذا كان ${cf} = ${r.conditionValue}`;
   }
   return `يجمع عمود ${amountField}`;
@@ -1005,10 +1008,11 @@ function openCustomTableForm(existing=null){
         <option value="sum" ${existing?.rule?.type==='sum'?'selected':''}>جمع عمود المبلغ</option>
         <option value="subtract" ${existing?.rule?.type==='subtract'?'selected':''}>المبلغ الأساسي ناقص مجموع عمود</option>
         <option value="conditional" ${existing?.rule?.type==='conditional'?'selected':''}>إذا تحقق الشرط اجمع المبلغ، وإلا لا تضف شيئًا</option>
+        <option value="conditionalSubtract" ${existing?.rule?.type==='conditionalSubtract'?'selected':''}>إذا تحقق الشرط اخصم المبلغ من المبلغ الأساسي</option>
       </select>
     </label>
     <label class="field"><span>اسم عمود المبلغ كما كتبته</span><input name="amountLabel" required placeholder="المبلغ" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.amountKey)?.label||'':'')}"></label>
-    <label class="field"><span>المبلغ الأساسي (يستخدم مع الناقص)</span><input name="baseAmount" type="number" step="0.01" value="${escapeHtml(existing?.rule?.baseAmount??0)}"></label>
+    <label class="field"><span>المبلغ الأساسي (يستخدم مع الناقص والخصم المشروط)</span><input name="baseAmount" type="number" step="0.01" value="${escapeHtml(existing?.rule?.baseAmount??0)}"></label>
     <label class="field"><span>اسم عمود الشرط (للقاعدة الشرطية)</span><input name="conditionLabel" placeholder="الحالة" value="${escapeHtml(existing?(existing.fields||[]).find(f=>f.key===existing.rule?.conditionKey)?.label||'':'')}"></label>
     <label class="field"><span>القيمة التي تحقق الشرط</span><input name="conditionValue" placeholder="true أو نعم" value="${escapeHtml(existing?.rule?.conditionValue||'')}"></label>
     <div class="form-actions"><button class="primary-btn" type="submit">إنشاء الجدول</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
