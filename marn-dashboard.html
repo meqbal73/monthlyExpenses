@@ -496,6 +496,12 @@ function renderSalary(){
     running-=Number(x.amount);
     return `<tr><td>${escapeHtml(x.name)}</td><td class="amount negative">${fmtMoney(x.amount)}</td><td class="amount">${fmtMoney(running)}</td><td>${actions('expense',x.id)}</td></tr>`;
   });
+  // تُحتسب مبالغ الديون الأصلية ضمن الالتزامات وتُخصم من المتبقي.
+  state.debts.forEach(d=>{
+    const amount=Number(d.amount||0);
+    running-=amount;
+    exRows.push(`<tr><td>دين: ${escapeHtml(d.name)}</td><td class="amount negative">${fmtMoney(amount)}</td><td class="amount">${fmtMoney(running)}</td><td><span class="muted">من جدول الديون</span></td></tr>`);
+  });
   $('#expensesTable').innerHTML=table(['البند','المبلغ','المتبقي',''],exRows);
 
   let cr=0;
@@ -516,10 +522,11 @@ function renderSalary(){
       <td class="${remaining>0?'negative':'positive'}">${fmtMoney(remaining)}</td>
       <td>${d.dueDate?fmtDate(d.dueDate):'—'}</td>
       <td>${statusBadge(status,cls)}</td>
+      <td><label class="inline-check"><input type="checkbox" data-toggle-debt-paid="${d.id}" ${remaining<=0?'checked':''}><span>مسدد بالكامل</span></label></td>
       <td>${actions('debt',d.id)}</td>
     </tr>`;
   });
-  $('#debtsTable').innerHTML=table(['الجهة / الشخص','المبلغ الأصلي','المدفوع','المتبقي','الاستحقاق','الحالة',''],debtRows);
+  $('#debtsTable').innerHTML=table(['الجهة / الشخص','المبلغ الأصلي','المدفوع','المتبقي','الاستحقاق','الحالة','سداد سريع',''],debtRows);
 
   renderAggregation();
 
@@ -600,7 +607,7 @@ function renderBudgets(){
       </div>
       <button class="secondary-btn full" data-add-budget-entry="${b.id}">+ إضافة مبلغ/مصروف</button>
       <div class="budget-entries">
-        ${entries.length?entries.map(e=>`<div class="budget-entry"><span>${fmtDate(e.date)} · ${escapeHtml(e.note||'بدون وصف')}</span><strong>${fmtMoney(e.amount)} ر.س</strong><div class="row-actions"><button class="mini-btn" data-edit-budget-entry="${b.id}" data-entry-id="${e.id}">تعديل</button><button class="mini-btn" data-delete-budget-entry="${b.id}" data-entry-id="${e.id}">حذف</button></div></div>`).join(''):'<span class="muted">لا توجد حركات بعد.</span>'}
+        ${entries.length?entries.map(e=>`<div class="budget-entry"><span>${fmtDate(e.date)} · ${escapeHtml(e.note||b.name||'بدون وصف')}</span><strong>${fmtMoney(e.amount)} ر.س</strong><div class="row-actions"><button class="mini-btn" data-edit-budget-entry="${b.id}" data-entry-id="${e.id}">تعديل</button><button class="mini-btn" data-delete-budget-entry="${b.id}" data-entry-id="${e.id}">حذف</button></div></div>`).join(''):'<span class="muted">لا توجد حركات بعد.</span>'}
       </div>
     </article>`;
   }).join('');
@@ -790,7 +797,10 @@ function itemForm(type,item={}){
     }[type];
     openModal(`<form class="form" id="itemForm">
       <h2>${item.__edit?'تعديل':'إضافة'} ${defs.title}</h2>
-      ${defs.fields.map(([k,l,t])=>`<label class="field"><span>${l}</span><input name="${k}" type="${t}" step="0.01" required value="${escapeHtml(item[k]??'')}"></label>`).join('')}
+      ${defs.fields.map(([k,l,t])=>{
+        const optional=type==='debt' && k==='dueDate';
+        return `<label class="field"><span>${l}${optional?' (اختياري)':''}</span><input name="${k}" type="${t}" step="0.01" ${optional?'':'required'} value="${escapeHtml(item[k]??'')}"></label>`;
+      }).join('')}
       <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
     </form>`);
   }
@@ -943,14 +953,14 @@ function openBudgetEntryForm(budget,entry=null){
   openModal(`<form class="form" id="budgetEntryForm">
     <h2>${entry?'تعديل حركة':'إضافة حركة إلى'} ${escapeHtml(budget.name)}</h2>
     <label class="field"><span>التاريخ</span><input name="date" type="date" required value="${escapeHtml(entry?.date||`${budget.month}-01`)}"></label>
-    <label class="field"><span>الوصف</span><input name="note" required placeholder="مثال: تعبئة بنزين" value="${escapeHtml(entry?.note||'')}"></label>
+    <label class="field"><span>الوصف (اختياري)</span><input name="note" placeholder="مثال: تعبئة بنزين" value="${escapeHtml(entry?.note||'')}"></label>
     <label class="field"><span>المبلغ</span><input name="amount" type="number" min="0" step="0.01" required value="${escapeHtml(entry?.amount??'')}"></label>
     <div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div>
   </form>`);
   $('#cancelModal').onclick=closeModal;
   $('#budgetEntryForm').onsubmit=async e=>{
     e.preventDefault(); const fd=new FormData(e.target);
-    const data={date:fd.get('date'),note:fd.get('note'),amount:Number(fd.get('amount')||0)};
+    const data={date:fd.get('date'),note:(fd.get('note')||'').trim(),amount:Number(fd.get('amount')||0)};
     if(entry) Object.assign(entry,data); else budget.entries.push({id:uid('be'),...data});
     await persist(); closeModal(); render(); toast(entry?'تم تعديل الحركة':'تمت إضافة الحركة');
   };
@@ -1174,6 +1184,7 @@ document.addEventListener('click',async e=>{
   const edit=e.target.closest('[data-edit]');
   const month=e.target.closest('[data-month]');
   const toggle=e.target.closest('[data-toggle-reward]');
+  const toggleDebtPaid=e.target.closest('[data-toggle-debt-paid]');
   const addBudgetEntry=e.target.closest('[data-add-budget-entry]');
   const editBudget=e.target.closest('[data-edit-budget]');
   const deleteBudget=e.target.closest('[data-delete-budget]');
@@ -1206,6 +1217,14 @@ document.addEventListener('click',async e=>{
   if(toggle){
     const r=state.rewards.find(x=>x.id===toggle.dataset.toggleReward);
     r.received=!r.received; await persist(); render();
+  }
+  if(toggleDebtPaid){
+    const d=state.debts.find(x=>x.id===toggleDebtPaid.dataset.toggleDebtPaid);
+    if(d){
+      d.paid=toggleDebtPaid.checked?Number(d.amount||0):0;
+      await persist(); render();
+      toast(toggleDebtPaid.checked?'تم تسجيل الدين كمسدد بالكامل':'تم إلغاء حالة السداد الكامل');
+    }
   }
   if(addBudgetEntry){
     const b=state.budgets.find(x=>x.id===addBudgetEntry.dataset.addBudgetEntry);
