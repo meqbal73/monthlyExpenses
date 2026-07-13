@@ -9,3 +9,21 @@
 .inline-check{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;cursor:pointer;font-size:.84rem}
 .inline-check input{width:17px;height:17px;accent-color:var(--primary,#6d5dfc);cursor:pointer}
 .inline-check span{color:var(--text,#eaf0ff)}
+
+/* Attendance calendar */
+.attendance-calendar-panel{margin-top:18px}
+.calendar-nav{display:flex;align-items:center;gap:10px}
+.calendar-nav strong{min-width:150px;text-align:center}
+.attendance-summary{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px}
+.attendance-summary span,.table-summary{background:var(--surface-2,#f3f4f6);border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:10px 14px}
+.attendance-summary strong{margin-inline-end:5px}
+.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.calendar-weekday{text-align:center;font-weight:800;color:var(--muted,#64748b);padding:6px}
+.calendar-day{min-height:76px;border:1px solid var(--border,#e5e7eb);border-radius:12px;padding:8px;display:flex;flex-direction:column;justify-content:space-between;background:var(--surface,#fff)}
+.calendar-day.empty{visibility:hidden}
+.calendar-day.worked{border-color:#7c3aed;background:linear-gradient(145deg,rgba(124,58,237,.18),rgba(59,130,246,.08));box-shadow:inset 0 0 0 1px rgba(124,58,237,.12)}
+.calendar-day.today{outline:2px solid #22c55e;outline-offset:1px}
+.calendar-day span{font-weight:800}
+.calendar-day small{font-size:.72rem;color:var(--muted,#64748b)}
+.table-summary{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+@media(max-width:640px){.calendar-grid{gap:4px}.calendar-day{min-height:58px;padding:5px}.calendar-day small{font-size:.62rem}.calendar-nav strong{min-width:120px}.table-summary{align-items:flex-start;flex-direction:column}}

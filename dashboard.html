@@ -22,7 +22,6 @@
         <button class="nav-item active" data-view="dashboard">🏠 <span>الرئيسية</span></button>
         <button class="nav-item" data-view="salary">💳 <span>الراتب والالتزامات</span></button>
         <button class="nav-item" data-view="marn">⏱️ <span>دخل مرن</span></button>
-        <a class="nav-item" href="marn-dashboard.html">📊 <span>لوحة مرن</span></a>
         <button class="nav-item" data-view="rewards">🎓 <span>مكافآت الجامعة</span></button>
         <button class="nav-item" data-view="settings">⚙️ <span>الإعدادات</span></button>
       </nav>
@@ -56,7 +55,7 @@
 
         <div class="kpi-grid">
           <article class="kpi-card"><span>إجمالي مستحقات مرن</span><strong id="marnDueKpi">0</strong><small>ر.س · غير المستلم فقط</small></article>
-          <article class="kpi-card"><span>مصروفات المكافأة</span><strong id="expensesKpi">0</strong><small>ر.س</small></article>
+          <article class="kpi-card"><span>المصروفات</span><strong id="expensesKpi">0</strong><small>ر.س</small></article>
           <article class="kpi-card"><span>راتب آخر شهر</span><strong id="latestSalaryKpi">0</strong><small id="latestSalaryMonth">ر.س</small></article>
           <article class="kpi-card"><span>صافي الميزانيات الشهرية</span><strong id="budgetRemainingKpi">0</strong><small>ر.س</small></article>
         </div>
@@ -75,6 +74,19 @@
             </div>
           </article>
         </div>
+
+        <article class="panel attendance-calendar-panel">
+          <div class="panel-head">
+            <div><span class="eyebrow">أيام الدوام</span><h3>تقويم الشفتات</h3><p>الأيام المعلّمة مأخوذة تلقائيًا من الشفتات المسجلة.</p></div>
+            <div class="calendar-nav">
+              <button class="mini-btn" id="calendarPrevBtn" aria-label="الشهر السابق">‹</button>
+              <strong id="calendarMonthTitle"></strong>
+              <button class="mini-btn" id="calendarNextBtn" aria-label="الشهر التالي">›</button>
+            </div>
+          </div>
+          <div class="attendance-summary" id="attendanceSummary"></div>
+          <div class="calendar-grid" id="attendanceCalendar"></div>
+        </article>
       </section>
 
       <section class="view" id="salaryView">
@@ -102,7 +114,7 @@
         <div style="height:18px"></div>
 
         <div class="cards-grid-2">
-          <article class="panel"><div class="panel-head"><h3>مصروفات المكافأة القديمة</h3><button class="text-btn" data-add="expense">إضافة</button></div><div id="expensesTable"></div></article>
+          <article class="panel"><div class="panel-head"><div><h3>المصروفات</h3><p id="expensesModeHint">الحساب التجميعي يعرض إجمالي المصروفات بدون رصيد متسلسل.</p></div><div class="row-actions"><button class="text-btn" id="expensesModeBtn">نوع الحساب</button><button class="text-btn" data-add="expense">إضافة</button></div></div><div id="expensesTable"></div></article>
           <article class="panel"><div class="panel-head"><h3>الدائنون</h3><button class="text-btn" data-add="creditor">إضافة</button></div><div id="creditorsTable"></div></article>
         </div>
 
@@ -117,7 +129,7 @@
 
         <article class="panel">
           <div class="panel-head">
-            <div><span class="eyebrow">التجميع</span><h3>رصيد التجميع التراكمي</h3><p>رصيد مستمر لا يتصفر مع نهاية الشهر.</p></div>
+            <div><span class="eyebrow">التجميع</span><h3>رصيد التجميع</h3><p>سجل مستقل للإضافات والسحوبات مع رصيد واضح.</p></div>
             <button class="text-btn" id="addAggregationBtn">+ إضافة حركة</button>
           </div>
           <div class="settlement-grid" style="margin-bottom:16px">
@@ -319,6 +331,7 @@ function migrateState(data){
   const next = data || cloneSeed();
   next.version = 2;
   next.expenses ||= [];
+  next.expensesMode ||= 'collective';
   next.creditors ||= [];
   next.debts ||= [];
   next.aggregation ||= { transactions: [] };
@@ -465,10 +478,52 @@ function renderDashboard(){
     $('#nextRewardCard').innerHTML='<p>لا توجد مكافأة منتظرة.</p>';
   }
 
+  renderAttendanceCalendar();
+
   const payDate=nextMarnPayDate();
   $('#nextMarnSalaryCard').innerHTML=`
     <div><span class="countdown">${daysUntil(payDate)}</span> <span class="countdown-label">يوم</span></div>
     <div class="reward-date">${new Intl.DateTimeFormat('ar-SA',{dateStyle:'medium'}).format(payDate)} · يوم 15 ميلادي</div>`;
+}
+
+let calendarCursor=new Date();
+calendarCursor.setDate(1);
+function allShiftDates(){
+  const map=new Map();
+  Object.values(state.months||{}).forEach(m=>(m.shifts||[]).forEach(sh=>{
+    if(!sh.date)return;
+    const current=map.get(sh.date)||{count:0,hours:0,total:0};
+    current.count+=1; current.hours+=Number(sh.hours||0); current.total+=shiftTotal(sh);
+    map.set(sh.date,current);
+  }));
+  return map;
+}
+function renderAttendanceCalendar(){
+  const grid=$('#attendanceCalendar'); if(!grid)return;
+  const y=calendarCursor.getFullYear(), m=calendarCursor.getMonth();
+  $('#calendarMonthTitle').textContent=new Intl.DateTimeFormat('ar-SA',{month:'long',year:'numeric'}).format(calendarCursor);
+  const shifts=allShiftDates();
+  const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}-`;
+  const monthEntries=[...shifts.entries()].filter(([date])=>date.startsWith(monthPrefix));
+  const totalHours=monthEntries.reduce((sum,[,v])=>sum+v.hours,0);
+  const totalAmount=monthEntries.reduce((sum,[,v])=>sum+v.total,0);
+  $('#attendanceSummary').innerHTML=`<span><strong>${monthEntries.length}</strong> يوم دوام</span><span><strong>${durationLabel(totalHours)}</strong> إجمالي الوقت</span><span><strong>${fmtMoney(totalAmount)} ر.س</strong> قيمة الشفتات</span>`;
+  const weekdays=['ح','ن','ث','ر','خ','ج','س'];
+  let html=weekdays.map(d=>`<div class="calendar-weekday">${d}</div>`).join('');
+  const first=new Date(y,m,1), lastDay=new Date(y,m+1,0).getDate();
+  for(let i=0;i<first.getDay();i++)html+='<div class="calendar-day empty"></div>';
+  const todayKey=new Date().toISOString().slice(0,10);
+  for(let day=1;day<=lastDay;day++){
+    const key=`${monthPrefix}${String(day).padStart(2,'0')}`;
+    const info=shifts.get(key);
+    html+=`<div class="calendar-day ${info?'worked':''} ${key===todayKey?'today':''}" title="${info?`${info.count} شفت · ${durationLabel(info.hours)} · ${fmtMoney(info.total)} ر.س`:''}"><span>${day}</span>${info?`<small>${durationLabel(info.hours)}</small>`:''}</div>`;
+  }
+  grid.innerHTML=html;
+}
+function openExpensesModeForm(){
+  openModal(`<form class="form" id="expensesModeForm"><h2>نوع حساب جدول المصروفات</h2><p>يمكن تغيير النوع في أي وقت بدون حذف البيانات.</p><label class="field"><span>طريقة الحساب</span><select name="mode"><option value="collective" ${state.expensesMode!=='cumulative'?'selected':''}>تجميعي — يعرض إجمالي المصروفات</option><option value="cumulative" ${state.expensesMode==='cumulative'?'selected':''}>تراكمي — يعرض المتبقي بعد كل بند</option></select></label><div class="form-actions"><button class="primary-btn" type="submit">حفظ</button><button class="secondary-btn" type="button" id="cancelModal">إلغاء</button></div></form>`);
+  $('#cancelModal').onclick=closeModal;
+  $('#expensesModeForm').onsubmit=async e=>{e.preventDefault();state.expensesMode=new FormData(e.target).get('mode');await persist();closeModal();renderSalary();toast('تم تحديث نوع الحساب');};
 }
 
 function table(headers, rows){
@@ -482,18 +537,28 @@ function statusBadge(label,cls=''){
 }
 
 function renderSalary(){
-  let running=Number(state.rewardBase||0);
-  const exRows=state.expenses.map(x=>{
-    running-=Number(x.amount);
-    return `<tr><td>${escapeHtml(x.name)}</td><td class="amount negative">${fmtMoney(x.amount)}</td><td class="amount">${fmtMoney(running)}</td><td>${actions('expense',x.id)}</td></tr>`;
-  });
-  // تُحتسب مبالغ الديون الأصلية ضمن الالتزامات وتُخصم من المتبقي.
-  state.debts.forEach(d=>{
-    const amount=Number(d.amount||0);
-    running-=amount;
-    exRows.push(`<tr><td>دين: ${escapeHtml(d.name)}</td><td class="amount negative">${fmtMoney(amount)}</td><td class="amount">${fmtMoney(running)}</td><td><span class="muted">من جدول الديون</span></td></tr>`);
-  });
-  $('#expensesTable').innerHTML=table(['البند','المبلغ','المتبقي',''],exRows);
+  const mode=state.expensesMode==='cumulative'?'cumulative':'collective';
+  const totalExpenses=state.expenses.reduce((sum,x)=>sum+Number(x.amount||0),0)
+    + state.debts.reduce((sum,d)=>sum+Number(d.amount||0),0);
+  let exRows=[];
+  if(mode==='cumulative'){
+    let running=Number(state.rewardBase||0);
+    exRows=state.expenses.map(x=>{
+      running-=Number(x.amount||0);
+      return `<tr><td>${escapeHtml(x.name)}</td><td class="amount negative">${fmtMoney(x.amount)}</td><td class="amount">${fmtMoney(running)}</td><td>${actions('expense',x.id)}</td></tr>`;
+    });
+    state.debts.forEach(d=>{
+      const amount=Number(d.amount||0); running-=amount;
+      exRows.push(`<tr><td>دين: ${escapeHtml(d.name)}</td><td class="amount negative">${fmtMoney(amount)}</td><td class="amount">${fmtMoney(running)}</td><td><span class="muted">من جدول الديون</span></td></tr>`);
+    });
+    $('#expensesTable').innerHTML=`<div class="table-summary"><span>نوع الحساب: تراكمي</span><strong>المتبقي النهائي: ${fmtMoney(running)} ر.س</strong></div>${table(['البند','المبلغ','المتبقي بعد البند',''],exRows)}`;
+    $('#expensesModeHint').textContent='الحساب التراكمي يخصم كل بند بالتسلسل ويعرض المتبقي بعد كل صف.';
+  } else {
+    exRows=state.expenses.map(x=>`<tr><td>${escapeHtml(x.name)}</td><td class="amount negative">${fmtMoney(x.amount)}</td><td>${actions('expense',x.id)}</td></tr>`);
+    state.debts.forEach(d=>exRows.push(`<tr><td>دين: ${escapeHtml(d.name)}</td><td class="amount negative">${fmtMoney(d.amount)}</td><td><span class="muted">من جدول الديون</span></td></tr>`));
+    $('#expensesTable').innerHTML=`<div class="table-summary"><span>نوع الحساب: تجميعي</span><strong>إجمالي المصروفات: ${fmtMoney(totalExpenses)} ر.س</strong></div>${table(['البند','المبلغ',''],exRows)}`;
+    $('#expensesModeHint').textContent='الحساب التجميعي يجمع كل المصروفات في إجمالي واحد بدون رصيد متسلسل.';
+  }
 
   let cr=0;
   const crRows=state.creditors.map(x=>{
@@ -1253,6 +1318,9 @@ $('#deleteMonthBtn').onclick=deleteActiveMonth;
 $('#addBudgetBtn').onclick=()=>openBudgetForm();
 $('#addCustomTableBtn').onclick=openCustomTableForm;
 $('#addAggregationBtn').onclick=()=>openAggregationForm();
+$('#expensesModeBtn').onclick=openExpensesModeForm;
+$('#calendarPrevBtn').onclick=()=>{calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()-1,1);renderAttendanceCalendar();};
+$('#calendarNextBtn').onclick=()=>{calendarCursor=new Date(calendarCursor.getFullYear(),calendarCursor.getMonth()+1,1);renderAttendanceCalendar();};
 $('#archiveMonthBtn').onclick=()=>archiveMonth(currentMonthKey(),false);
 $('#exportBtn').onclick=()=>{
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
