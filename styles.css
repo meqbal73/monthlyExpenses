@@ -32,3 +32,7 @@
 .dashboard-grid .attendance-calendar-panel{margin-top:0;min-width:0}
 .dashboard-grid .calendar-day{min-height:64px}
 @media(max-width:900px){.dashboard-grid .attendance-calendar-panel{grid-column:1/-1}}
+
+/* Debt total shown directly below the section title */
+.debt-total-summary{margin-top:-4px;margin-bottom:14px}
+.debt-total-summary strong{color:var(--accent);font-size:1.08rem}

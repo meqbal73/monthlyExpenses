@@ -118,6 +118,10 @@
 
         <article class="panel">
           <div class="panel-head"><div><span class="eyebrow">التزاماتي</span><h3>جدول ديوني الخاصة</h3></div><button class="text-btn" data-add="debt">+ إضافة دين</button></div>
+          <div class="table-summary debt-total-summary">
+            <span>الإجمالي</span>
+            <strong id="debtsTotal">0.00 ر.س</strong>
+          </div>
           <div id="debtsTable"></div>
         </article>
 
@@ -564,6 +568,8 @@ function renderSalary(){
       <td>${actions('debt',d.id)}</td>
     </tr>`;
   });
+  const debtsTotal=state.debts.reduce((sum,d)=>sum+Number(d.amount||0),0);
+  $('#debtsTotal').textContent=`${fmtMoney(debtsTotal)} ر.س`;
   $('#debtsTable').innerHTML=table(['الجهة / الشخص','المبلغ الأصلي','المدفوع','المتبقي','الاستحقاق','الحالة','سداد سريع',''],debtRows);
 
   renderAggregation();
